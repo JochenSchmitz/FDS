@@ -9,6 +9,9 @@ import {
 export const useDocumentsStore = defineStore('documents', {
   state: () => ({
     docs: [] as DocumentOut[],
+    // Suchtreffer für die Kachel "Bearbeitete Dokumente" — null = keine
+    // aktive Suche. Die Warteschlange nutzt immer die ungefilterte Liste.
+    results: null as DocumentOut[] | null,
     query: '',
     loading: false,
     uploading: false,
@@ -35,12 +38,27 @@ export const useDocumentsStore = defineStore('documents', {
     async fetch() {
       this.loading = true
       try {
-        this.docs = await api.list(this.query)
+        this.docs = await api.list()
         this.error = ''
       } catch (e) {
         this.error = (e as Error).message
       } finally {
         this.loading = false
+      }
+    },
+
+    /** Suche (ab 4 Zeichen) — betrifft nur die Ergebnisliste. */
+    async search() {
+      const q = this.query.trim()
+      if (q.length < 4) {
+        this.results = null
+        return
+      }
+      try {
+        this.results = await api.list(q)
+        this.error = ''
+      } catch (e) {
+        this.error = (e as Error).message
       }
     },
 
@@ -93,7 +111,7 @@ export const useDocumentsStore = defineStore('documents', {
     ensurePolling() {
       if (this.pollTimer) return
       this.pollTimer = setInterval(async () => {
-        await Promise.all([this.fetch(), this.fetchStatus()])
+        await Promise.all([this.fetch(), this.fetchStatus(), this.search()])
         if (this.busyCount === 0 && this.pollTimer) {
           clearInterval(this.pollTimer)
           this.pollTimer = 0

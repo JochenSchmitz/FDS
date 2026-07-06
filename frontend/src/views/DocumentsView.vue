@@ -22,7 +22,7 @@ watch(
   (q) => {
     if (debounce) clearTimeout(debounce)
     if (q.trim().length >= 4 || q.trim().length === 0) {
-      debounce = setTimeout(() => store.fetch(), 250)
+      debounce = setTimeout(() => store.search(), 250)
     }
   },
 )
@@ -30,11 +30,12 @@ onUnmounted(() => {
   if (debounce) clearTimeout(debounce)
 })
 
+// Warteschlange: immer ungefiltert — die Suche wirkt nur rechts
 const queueDocs = computed(() =>
   store.docs.filter((d) => d.status !== 'done'),
 )
 const doneDocs = computed(() =>
-  store.docs.filter((d) => d.status === 'done'),
+  (store.results ?? store.docs).filter((d) => d.status === 'done'),
 )
 
 const statusLabel: Record<DocumentOut['status'], string> = {
