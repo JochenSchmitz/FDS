@@ -5,12 +5,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Cookie, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import auth, config
 from ..db import SessionDep
-from ..models import DocStatus, Document
+from ..models import DocStatus, Document, Page
 from ..schemas import DocumentDetail, DocumentOut
 
 router = APIRouter(prefix='/api/documents', tags=['documents'])
@@ -58,14 +58,27 @@ async def upload(files: list[UploadFile], db: SessionDep, user: auth.UserDep):
 
 @router.get('', response_model=list[DocumentOut])
 def list_documents(db: SessionDep, user: auth.UserDep, q: str = ''):
+    """Dokumentliste, optional gefiltert per Trigram-Suche (pg_trgm).
+
+    Durchsucht Dateiname, Zusammenfassung, Schlagworte und den
+    OCR-Volltext aller Seiten; die GIN-Trigram-Indizes machen die
+    ILIKE-'%...%'-Suchen auch bei großen Beständen schnell.
+    """
     stmt = select(Document).order_by(Document.uploaded_at.desc())
+    q = q.strip()
     if q:
         like = f'%{q}%'
+        page_match = (
+            select(Page.id)
+            .where(Page.document_id == Document.id, Page.content_md.ilike(like))
+            .exists()
+        )
         stmt = stmt.where(
             or_(
                 Document.filename.ilike(like),
                 Document.summary.ilike(like),
-                Document.tags.any(q),
+                func.array_to_string(Document.tags, ' ').ilike(like),
+                page_match,
             )
         )
     return db.scalars(stmt).all()

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import UploadZone from '../components/UploadZone.vue'
 import { useDocumentsStore } from '../stores/documents'
@@ -10,6 +10,22 @@ const store = useDocumentsStore()
 onMounted(async () => {
   await store.fetch()
   if (store.busyCount > 0) store.ensurePolling()
+})
+
+// Live-Suche: ab dem 4. Zeichen sofort (debounced) suchen,
+// bei leerem Feld wieder alle Dokumente zeigen.
+let debounce = 0 as ReturnType<typeof setTimeout> | 0
+watch(
+  () => store.query,
+  (q) => {
+    if (debounce) clearTimeout(debounce)
+    if (q.trim().length >= 4 || q.trim().length === 0) {
+      debounce = setTimeout(() => store.fetch(), 250)
+    }
+  },
+)
+onUnmounted(() => {
+  if (debounce) clearTimeout(debounce)
 })
 
 const statusLabel: Record<DocumentOut['status'], string> = {
@@ -42,10 +58,11 @@ async function remove(doc: DocumentOut) {
       <input
         v-model="store.query"
         type="search"
-        placeholder="Suche in Dateiname, Schlagworten, Zusammenfassung …"
-        @keyup.enter="store.fetch()"
+        placeholder="Live-Suche ab 4 Zeichen — Dateiname, Schlagworte, Volltext …"
       />
-      <button @click="store.fetch()">Suchen</button>
+      <span v-if="store.query && store.query.trim().length < 4" class="hint">
+        noch {{ 4 - store.query.trim().length }} Zeichen …
+      </span>
       <span v-if="store.busyCount" class="busy">
         {{ store.busyCount }} in Arbeit …
       </span>
@@ -122,6 +139,10 @@ async function remove(doc: DocumentOut) {
 }
 .busy {
   color: var(--warn);
+}
+.hint {
+  color: var(--text-dim);
+  font-size: 0.85rem;
 }
 table {
   width: 100%;

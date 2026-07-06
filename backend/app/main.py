@@ -16,11 +16,36 @@ logging.basicConfig(
 )
 
 
+def _init_search(connection) -> None:
+    """Trigram-Suche: Extension + GIN-Indizes für ILIKE '%...%'-Suchen."""
+    from sqlalchemy import text
+
+    connection.execute(text('CREATE EXTENSION IF NOT EXISTS pg_trgm'))
+    for name, ddl in {
+        'ix_documents_filename_trgm': (
+            'CREATE INDEX IF NOT EXISTS ix_documents_filename_trgm '
+            'ON documents USING gin (filename gin_trgm_ops)'
+        ),
+        'ix_documents_summary_trgm': (
+            'CREATE INDEX IF NOT EXISTS ix_documents_summary_trgm '
+            'ON documents USING gin (summary gin_trgm_ops)'
+        ),
+        'ix_pages_content_trgm': (
+            'CREATE INDEX IF NOT EXISTS ix_pages_content_trgm '
+            'ON pages USING gin (content_md gin_trgm_ops)'
+        ),
+    }.items():
+        connection.execute(text(ddl))
+    connection.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     config.ORIGINALS_DIR.mkdir(parents=True, exist_ok=True)
     config.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(engine)
+    with engine.connect() as connection:
+        _init_search(connection)
     from .worker import worker_loop
 
     task = asyncio.create_task(worker_loop())
