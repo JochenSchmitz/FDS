@@ -18,10 +18,29 @@ Ergebnisse als `.md` + `.docx` in `ergebnisse/` → Metadaten in Postgres →
 Side-by-Side-Viewer (Original | OCR-Ergebnis) über OnlyOffice.
 
 ```bash
-./start-app.sh        # startet Postgres + OCR-Modell + Backend (Strg+C beendet Backend)
+./dev-temux-start.sh   # Entwicklung: Backend (--reload) + Vite + ngrok in tmux
+./dev-temux-stop.sh    # ... alles wieder stoppen
+./start-app.sh         # Alternative ohne tmux/ngrok: nur lokal auf Port 8020
 ```
 
-Weboberfläche: **http://172.31.102.13:8020**
+Weboberfläche: lokal **http://localhost:5175** (Vite) bzw. **http://172.31.102.13:8020**
+(Backend liefert den letzten `npm run build`-Stand), extern
+**https://dokumentenkonvertierung.ngrok.io** (ngrok, Bezahl-Account).
+
+⚠️ Über die ngrok-Domain ist die Anwendung **ohne Anmeldung öffentlich
+erreichbar** — inklusive aller hochgeladenen Dokumente. Tunnel nur laufen
+lassen, wenn nötig, oder in ngrok eine Zugriffsbeschränkung (Basic Auth /
+OAuth / IP-Restriction) für den Endpoint konfigurieren.
+
+Alle Zugangsdaten/Tokens liegen in `.env` (nicht im Git; Vorlage:
+`.env.example`). Der OnlyOffice-Viewer bekommt seine öffentliche URL zur
+Laufzeit über die lokale ngrok-API (Port 4043, in `ngrok.yml` gepinnt —
+4040/4041 gehören den Agenten der Projekte wdf/vip).
+
+Makefile-Targets: `make backend` / `frontend` / `ngrok` / `infra-up` /
+`infra-down` / `quality` (ruff + pytest) / `format` / `test` / `install`.
+Versionierter Commit-Helfer: `./commit.sh "Nachricht"` (pflegt `VERSION`).
+Git-Remote: https://github.com/JochenSchmitz/DokumentenKonvertierung
 
 | Komponente | Technik | Wo |
 |---|---|---|

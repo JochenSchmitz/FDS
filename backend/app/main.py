@@ -48,11 +48,14 @@ async def _onlyoffice_public_url() -> str:
     weil der Browser das OnlyOffice-Script sonst nicht laden darf
     (Mixed Content). Fallback: die LAN-URL aus der Konfiguration.
     """
+    import os
+
     import httpx
 
+    ngrok_api = os.environ.get('NGROK_API_URL', 'http://localhost:4043')
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.get('http://localhost:4040/api/tunnels', timeout=1)
+            resp = await client.get(f'{ngrok_api}/api/tunnels', timeout=1)
             for tunnel in resp.json().get('tunnels', []):
                 if tunnel.get('config', {}).get('addr', '').endswith(':8082'):
                     return tunnel['public_url']

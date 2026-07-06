@@ -8,6 +8,10 @@
 #             Laufzeit über die lokale ngrok-API (Port 4040) ab.
 version: 3
 
+agent:
+  # 4040/4041 sind von den ngrok-Agenten der Projekte wdf/vip belegt
+  web_addr: localhost:4043
+
 endpoints:
   - name: app
     url: https://dokumentenkonvertierung.ngrok.io
