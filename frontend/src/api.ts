@@ -28,6 +28,15 @@ export interface AppConfig {
   ocrModelUp: boolean
 }
 
+export interface ProcessingStatus {
+  processing: string[]
+  pending: number
+  modelUp: boolean
+  runningRequests: number
+  waitingRequests: number
+  generatedTokens: number
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(url, init)
   if (resp.status === 401) {
@@ -48,6 +57,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   config: () => request<AppConfig>('/api/config'),
+  status: () => request<ProcessingStatus>('/api/status'),
   list: (q = '') =>
     request<DocumentOut[]>(`/api/documents?q=${encodeURIComponent(q)}`),
   get: (id: string) => request<DocumentDetail>(`/api/documents/${id}`),

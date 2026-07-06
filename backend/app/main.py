@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config, ocr
 from .auth import UserDep
-from .db import Base, engine
+from .db import Base, SessionDep, engine
 from .routers import auth, documents, onlyoffice
 
 logging.basicConfig(
@@ -93,6 +93,53 @@ async def _onlyoffice_public_url() -> str:
     except Exception:  # noqa: BLE001
         pass
     return config.ONLYOFFICE_URL
+
+
+async def _vllm_counters() -> dict:
+    """Lebenszeichen des Modells aus den vLLM-Prometheus-Metriken."""
+    import httpx
+
+    counters = {'runningRequests': 0, 'waitingRequests': 0, 'generatedTokens': 0}
+    wanted = {
+        'vllm:num_requests_running': 'runningRequests',
+        'vllm:num_requests_waiting{': 'waitingRequests',
+        'vllm:generation_tokens_total': 'generatedTokens',
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                config.VLLM_URL.removesuffix('/v1') + '/metrics', timeout=2
+            )
+        for line in resp.text.splitlines():
+            for prefix, key in wanted.items():
+                if line.startswith(prefix):
+                    counters[key] += int(float(line.rsplit(' ', 1)[-1]))
+    except httpx.HTTPError, ValueError:
+        pass
+    return counters
+
+
+@app.get('/api/status')
+async def processing_status(user: UserDep, db: SessionDep):
+    """Verarbeitungs-Status für die Live-Anzeige im Frontend."""
+    from sqlalchemy import func, select
+
+    from .models import DocStatus, Document
+
+    processing = db.scalars(
+        select(Document.filename).where(Document.status == DocStatus.processing)
+    ).all()
+    pending = db.scalar(
+        select(func.count())
+        .select_from(Document)
+        .where(Document.status == DocStatus.pending)
+    )
+    return {
+        'processing': processing,
+        'pending': pending,
+        'modelUp': await ocr.is_model_up(),
+        **await _vllm_counters(),
+    }
 
 
 @app.get('/api/config')

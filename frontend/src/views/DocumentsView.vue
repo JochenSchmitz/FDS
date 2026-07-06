@@ -8,7 +8,7 @@ import type { DocumentOut } from '../api'
 const store = useDocumentsStore()
 
 onMounted(async () => {
-  await store.fetch()
+  await Promise.all([store.fetch(), store.fetchStatus()])
   if (store.busyCount > 0) store.ensurePolling()
 })
 
@@ -65,6 +65,26 @@ async function remove(doc: DocumentOut) {
       </span>
       <span v-if="store.busyCount" class="busy">
         {{ store.busyCount }} in Arbeit …
+      </span>
+    </div>
+
+    <div
+      v-if="store.status && (store.status.processing.length || store.status.pending)"
+      class="statusbar"
+    >
+      <span class="pulse" />
+      <span v-if="store.status.processing.length">
+        Liest gerade: <strong>{{ store.status.processing.join(', ') }}</strong>
+        ({{ store.status.runningRequests }} Seiten parallel)
+      </span>
+      <span v-if="store.status.pending">
+        · Warteschlange: {{ store.status.pending }}
+      </span>
+      <span class="tokens">
+        {{ store.status.generatedTokens.toLocaleString('de-DE') }} Tokens erzeugt
+        <template v-if="store.tokensPerSecond">
+          — {{ store.tokensPerSecond }} Tokens/s
+        </template>
       </span>
     </div>
 
@@ -143,6 +163,34 @@ async function remove(doc: DocumentOut) {
 .hint {
   color: var(--text-dim);
   font-size: 0.85rem;
+}
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  font-size: 0.88rem;
+}
+.statusbar .tokens {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: pulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
 }
 table {
   width: 100%;

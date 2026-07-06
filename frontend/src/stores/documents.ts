@@ -1,5 +1,10 @@
 import { defineStore } from 'pinia'
-import { api, type AppConfig, type DocumentOut } from '../api'
+import {
+  api,
+  type AppConfig,
+  type DocumentOut,
+  type ProcessingStatus,
+} from '../api'
 
 export const useDocumentsStore = defineStore('documents', {
   state: () => ({
@@ -10,6 +15,9 @@ export const useDocumentsStore = defineStore('documents', {
     error: '' as string,
     config: null as AppConfig | null,
     pollTimer: 0 as ReturnType<typeof setInterval> | 0,
+    status: null as ProcessingStatus | null,
+    tokensPerSecond: 0,
+    lastTokenSample: null as { tokens: number; at: number } | null,
   }),
 
   getters: {
@@ -62,11 +70,30 @@ export const useDocumentsStore = defineStore('documents', {
       this.ensurePolling()
     },
 
-    /** Solange Dokumente in Arbeit sind, Liste alle 5 s aktualisieren. */
+    /** Lebenszeichen: was wird verarbeitet, wie viele Tokens fließen? */
+    async fetchStatus() {
+      try {
+        const s = await api.status()
+        if (this.lastTokenSample && s.generatedTokens >= this.lastTokenSample.tokens) {
+          const seconds = (Date.now() - this.lastTokenSample.at) / 1000
+          if (seconds > 0) {
+            this.tokensPerSecond = Math.round(
+              (s.generatedTokens - this.lastTokenSample.tokens) / seconds,
+            )
+          }
+        }
+        this.lastTokenSample = { tokens: s.generatedTokens, at: Date.now() }
+        this.status = s
+      } catch {
+        /* Statusanzeige ist unkritisch */
+      }
+    },
+
+    /** Solange Dokumente in Arbeit sind, Liste + Status alle 5 s aktualisieren. */
     ensurePolling() {
       if (this.pollTimer) return
       this.pollTimer = setInterval(async () => {
-        await this.fetch()
+        await Promise.all([this.fetch(), this.fetchStatus()])
         if (this.busyCount === 0 && this.pollTimer) {
           clearInterval(this.pollTimer)
           this.pollTimer = 0
