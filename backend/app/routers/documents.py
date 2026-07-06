@@ -1,13 +1,14 @@
 import shutil
 import uuid
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Cookie, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import config
+from .. import auth, config
 from ..db import SessionDep
 from ..models import DocStatus, Document
 from ..schemas import DocumentDetail, DocumentOut
@@ -26,7 +27,7 @@ MIME_BY_SUFFIX = {
 
 
 @router.post('', response_model=list[DocumentOut])
-async def upload(files: list[UploadFile], db: SessionDep):
+async def upload(files: list[UploadFile], db: SessionDep, user: auth.UserDep):
     created: list[Document] = []
     for f in files:
         suffix = Path(f.filename or 'datei').suffix.lower()
@@ -56,7 +57,7 @@ async def upload(files: list[UploadFile], db: SessionDep):
 
 
 @router.get('', response_model=list[DocumentOut])
-def list_documents(db: SessionDep, q: str = ''):
+def list_documents(db: SessionDep, user: auth.UserDep, q: str = ''):
     stmt = select(Document).order_by(Document.uploaded_at.desc())
     if q:
         like = f'%{q}%'
@@ -81,12 +82,12 @@ def _get_document(doc_id: uuid.UUID, db: Session, with_pages: bool = False) -> D
 
 
 @router.get('/{doc_id}', response_model=DocumentDetail)
-def get_document(doc_id: uuid.UUID, db: SessionDep):
+def get_document(doc_id: uuid.UUID, db: SessionDep, user: auth.UserDep):
     return _get_document(doc_id, db, with_pages=True)
 
 
 @router.post('/{doc_id}/reprocess', response_model=DocumentOut)
-def reprocess(doc_id: uuid.UUID, db: SessionDep):
+def reprocess(doc_id: uuid.UUID, db: SessionDep, user: auth.UserDep):
     doc = _get_document(doc_id, db, with_pages=True)
     if doc.status == DocStatus.processing:
         raise HTTPException(409, 'Dokument wird gerade verarbeitet')
@@ -98,7 +99,7 @@ def reprocess(doc_id: uuid.UUID, db: SessionDep):
 
 
 @router.delete('/{doc_id}', status_code=204)
-def delete_document(doc_id: uuid.UUID, db: SessionDep):
+def delete_document(doc_id: uuid.UUID, db: SessionDep, user: auth.UserDep):
     doc = _get_document(doc_id, db)
     (config.ORIGINALS_DIR / doc.stored_name).unlink(missing_ok=True)
     if doc.result_stem:
@@ -109,7 +110,13 @@ def delete_document(doc_id: uuid.UUID, db: SessionDep):
 
 
 @router.get('/{doc_id}/file/original')
-def file_original(doc_id: uuid.UUID, db: SessionDep):
+def file_original(
+    doc_id: uuid.UUID,
+    db: SessionDep,
+    session: Annotated[str | None, Cookie()] = None,
+    token: str | None = None,
+):
+    auth.check_file_access(doc_id, session, token)
     doc = _get_document(doc_id, db)
     path = config.ORIGINALS_DIR / doc.stored_name
     if not path.exists():
@@ -118,7 +125,14 @@ def file_original(doc_id: uuid.UUID, db: SessionDep):
 
 
 @router.get('/{doc_id}/file/{fmt}')
-def file_result(doc_id: uuid.UUID, fmt: str, db: SessionDep):
+def file_result(
+    doc_id: uuid.UUID,
+    fmt: str,
+    db: SessionDep,
+    session: Annotated[str | None, Cookie()] = None,
+    token: str | None = None,
+):
+    auth.check_file_access(doc_id, session, token)
     if fmt not in ('docx', 'md'):
         raise HTTPException(404, 'Unbekanntes Format')
     doc = _get_document(doc_id, db)

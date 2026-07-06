@@ -5,7 +5,7 @@ import uuid
 import jwt
 from fastapi import APIRouter, HTTPException
 
-from .. import config
+from .. import auth, config
 from ..db import SessionDep
 from .documents import _get_document
 
@@ -13,8 +13,11 @@ router = APIRouter(prefix='/api/onlyoffice', tags=['onlyoffice'])
 
 
 @router.get('/{doc_id}/{side}')
-def viewer_config(doc_id: uuid.UUID, side: str, db: SessionDep):
+def viewer_config(doc_id: uuid.UUID, side: str, db: SessionDep, user: auth.UserDep):
     doc = _get_document(doc_id, db)
+    # OnlyOffice ruft die Datei serverseitig ohne Sitzungs-Cookie ab —
+    # deshalb bekommt die URL ein signiertes, dokumentgebundenes Token.
+    file_token = auth.create_file_token(doc.id)
 
     if side == 'original':
         if not doc.mime.startswith('application/pdf'):
@@ -22,13 +25,19 @@ def viewer_config(doc_id: uuid.UUID, side: str, db: SessionDep):
                 409, 'Original ist ein Bild — direkt im Browser anzeigen'
             )
         file_type, document_type = 'pdf', 'pdf'
-        url = f'{config.PUBLIC_BASE_URL}/api/documents/{doc.id}/file/original'
+        url = (
+            f'{config.PUBLIC_BASE_URL}/api/documents/{doc.id}/file/original'
+            f'?token={file_token}'
+        )
         title = doc.filename
     elif side == 'result':
         if not doc.result_stem:
             raise HTTPException(409, 'Dokument ist noch nicht verarbeitet')
         file_type, document_type = 'docx', 'word'
-        url = f'{config.PUBLIC_BASE_URL}/api/documents/{doc.id}/file/docx'
+        url = (
+            f'{config.PUBLIC_BASE_URL}/api/documents/{doc.id}/file/docx'
+            f'?token={file_token}'
+        )
         title = f'{doc.filename} (OCR-Ergebnis)'
     else:
         raise HTTPException(404, 'side muss original oder result sein')

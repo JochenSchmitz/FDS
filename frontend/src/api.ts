@@ -30,6 +30,11 @@ export interface AppConfig {
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(url, init)
+  if (resp.status === 401) {
+    // Sitzung abgelaufen -> zur Anmeldung
+    window.location.href = `/login?weiter=${encodeURIComponent(location.pathname)}`
+    throw new Error('Nicht angemeldet')
+  }
   if (!resp.ok) {
     let detail = resp.statusText
     try {

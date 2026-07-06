@@ -1,6 +1,7 @@
 """Zentrale Konfiguration — alles per Umgebungsvariable übersteuerbar."""
 
 import os
+import secrets
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
@@ -24,6 +25,17 @@ ONLYOFFICE_URL = os.environ.get('ONLYOFFICE_URL', f'http://{PUBLIC_HOST}:8082')
 ONLYOFFICE_JWT_SECRET = os.environ.get(
     'ONLYOFFICE_JWT_SECRET', 'dev-onlyoffice-secret-change-me-32-bytes'
 )
+
+# --- Anmeldung: Benutzer aus AUTH_USERS ("email:pw,email:pw"), Sitzung
+# als signierter Cookie. Ohne AUTH_SECRET in der .env gelten Sitzungen
+# nur bis zum nächsten Neustart (zufälliger Schlüssel).
+AUTH_SECRET = os.environ.get('AUTH_SECRET') or secrets.token_hex(32)
+AUTH_SESSION_DAYS = int(os.environ.get('AUTH_SESSION_DAYS', '7'))
+AUTH_USERS: dict[str, str] = {}
+for _pair in os.environ.get('AUTH_USERS', '').split(','):
+    if ':' in _pair:
+        _email, _pw = _pair.split(':', 1)
+        AUTH_USERS[_email.strip().lower()] = _pw.strip()
 
 ORIGINALS_DIR = PROJECT_DIR / 'data' / 'originals'
 RESULTS_DIR = PROJECT_DIR / 'ergebnisse'

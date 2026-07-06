@@ -27,10 +27,12 @@ Weboberfläche: lokal **http://localhost:5175** (Vite) bzw. **http://172.31.102.
 (Backend liefert den letzten `npm run build`-Stand), extern
 **https://dokumentenkonvertierung.ngrok.io** (ngrok, Bezahl-Account).
 
-⚠️ Über die ngrok-Domain ist die Anwendung **ohne Anmeldung öffentlich
-erreichbar** — inklusive aller hochgeladenen Dokumente. Tunnel nur laufen
-lassen, wenn nötig, oder in ngrok eine Zugriffsbeschränkung (Basic Auth /
-OAuth / IP-Restriction) für den Endpoint konfigurieren.
+**Anmeldung:** Alle API-Endpunkte und die Oberfläche erfordern einen Login.
+Die Benutzer (E-Mail + Passwort) stehen in der `.env` (`AUTH_USERS`);
+die Sitzung hält 7 Tage (`AUTH_SESSION_DAYS`, HttpOnly-Cookie, signiert mit
+`AUTH_SECRET`). OnlyOffice ruft Dokumente über kurzlebige, dokumentgebundene
+signierte Tokens ab. Neue Benutzer: Zeile in `AUTH_USERS` ergänzen und
+Backend neu starten.
 
 Alle Zugangsdaten/Tokens liegen in `.env` (nicht im Git; Vorlage:
 `.env.example`). Der OnlyOffice-Viewer bekommt seine öffentliche URL zur

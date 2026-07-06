@@ -7,8 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config, ocr
+from .auth import UserDep
 from .db import Base, engine
-from .routers import documents, onlyoffice
+from .routers import auth, documents, onlyoffice
 
 logging.basicConfig(
     level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s'
@@ -36,6 +37,7 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(onlyoffice.router)
 
@@ -65,7 +67,7 @@ async def _onlyoffice_public_url() -> str:
 
 
 @app.get('/api/config')
-async def frontend_config():
+async def frontend_config(user: UserDep):
     return {
         'onlyofficeUrl': await _onlyoffice_public_url(),
         'apiBaseUrl': config.PUBLIC_BASE_URL,
