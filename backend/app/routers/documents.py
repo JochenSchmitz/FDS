@@ -61,23 +61,35 @@ def list_documents(db: SessionDep, user: auth.UserDep, q: str = ''):
     """Dokumentliste, optional gefiltert per Trigram-Suche (pg_trgm).
 
     Durchsucht Dateiname, Zusammenfassung, Schlagworte und den
-    OCR-Volltext aller Seiten; die GIN-Trigram-Indizes machen die
+    OCR-Volltext aller Seiten. Der Vergleich ist leerzeichen-
+    unempfindlich: Query und Text werden ohne Whitespace verglichen,
+    daher findet "ad blue" auch "AdBlue" und "Gewähr Leistung" auch
+    "Gewährleistung". Die GIN-Trigram-Expression-Indizes halten die
     ILIKE-'%...%'-Suchen auch bei großen Beständen schnell.
     """
     stmt = select(Document).order_by(Document.uploaded_at.desc())
-    q = q.strip()
+    q = ''.join(q.split())  # Whitespace aus der Query entfernen
     if q:
-        like = f'%{q}%'
+        escaped = q.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        like = f'%{escaped}%'
+
+        def squeezed(col):
+            # Muss exakt dem Ausdruck der Expression-Indizes entsprechen
+            return func.regexp_replace(col, '\\s', '', 'g')
+
         page_match = (
             select(Page.id)
-            .where(Page.document_id == Document.id, Page.content_md.ilike(like))
+            .where(
+                Page.document_id == Document.id,
+                squeezed(Page.content_md).ilike(like),
+            )
             .exists()
         )
         stmt = stmt.where(
             or_(
-                Document.filename.ilike(like),
-                Document.summary.ilike(like),
-                func.array_to_string(Document.tags, ' ').ilike(like),
+                squeezed(Document.filename).ilike(like),
+                squeezed(Document.summary).ilike(like),
+                squeezed(func.array_to_string(Document.tags, ' ')).ilike(like),
                 page_match,
             )
         )

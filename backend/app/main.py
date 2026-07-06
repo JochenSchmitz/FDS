@@ -22,12 +22,22 @@ def _init_search(connection) -> None:
 
     connection.execute(text('CREATE EXTENSION IF NOT EXISTS pg_trgm'))
     for ddl in (
-        'CREATE INDEX IF NOT EXISTS ix_documents_filename_trgm '
-        'ON documents USING gin (filename gin_trgm_ops)',
-        'CREATE INDEX IF NOT EXISTS ix_documents_summary_trgm '
-        'ON documents USING gin (summary gin_trgm_ops)',
-        'CREATE INDEX IF NOT EXISTS ix_pages_content_trgm '
-        'ON pages USING gin (content_md gin_trgm_ops)',
+        # Alte, zeichengenaue Indizes durch Expression-Indizes auf dem
+        # whitespace-bereinigten Text ersetzen: die Suche entfernt in
+        # Query UND Text alle Leerzeichen ("ad blue" findet "AdBlue",
+        # "Gewähr Leistung" findet "Gewährleistung").
+        'DROP INDEX IF EXISTS ix_documents_filename_trgm',
+        'DROP INDEX IF EXISTS ix_documents_summary_trgm',
+        'DROP INDEX IF EXISTS ix_pages_content_trgm',
+        'CREATE INDEX IF NOT EXISTS ix_documents_filename_trgm_ws '
+        'ON documents USING gin '
+        "((regexp_replace(filename, '\\s', '', 'g')) gin_trgm_ops)",
+        'CREATE INDEX IF NOT EXISTS ix_documents_summary_trgm_ws '
+        'ON documents USING gin '
+        "((regexp_replace(summary, '\\s', '', 'g')) gin_trgm_ops)",
+        'CREATE INDEX IF NOT EXISTS ix_pages_content_trgm_ws '
+        'ON pages USING gin '
+        "((regexp_replace(content_md, '\\s', '', 'g')) gin_trgm_ops)",
     ):
         connection.execute(text(ddl))
     connection.commit()
