@@ -116,13 +116,36 @@ async def _process(doc_id) -> None:
             else:
                 images = [original.read_bytes()]
 
-        async def read_page(png: bytes) -> str:
+        async def read_page(page_no: int, png: bytes) -> str:
+            """Eine Seite lesen — mit Wiederholungen; ein endgültig
+            fehlgeschlagener Einzelversuch reißt nicht mehr das ganze
+            Dokument mit, sondern hinterlässt einen Platzhalter."""
             async with sem:
-                return await ocr.ocr_page(client, png)
+                for attempt in range(1, 4):
+                    try:
+                        return await ocr.ocr_page(client, png)
+                    except Exception as exc:  # noqa: BLE001
+                        reason = str(exc) or repr(exc)
+                        log.warning(
+                            '%s Seite %d, Versuch %d/3: %s',
+                            filename,
+                            page_no,
+                            attempt,
+                            reason,
+                        )
+                        if attempt == 3:
+                            return (
+                                f'[Seite {page_no}: Lesefehler nach '
+                                f'3 Versuchen — {reason}]'
+                            )
+                        await asyncio.sleep(10)
+                raise AssertionError('unreachable')
 
         CURRENT = {'id': str(doc_id), 'filename': filename, 'pages': len(images)}
         log.info('%s: %d Seiten -> Modell', filename, len(images))
-        texts = await asyncio.gather(*(read_page(png) for png in images))
+        texts = await asyncio.gather(
+            *(read_page(i, png) for i, png in enumerate(images, 1))
+        )
         meta = await ocr.extract_metadata(client, '\n\n'.join(texts))
 
     with SessionLocal() as db:
@@ -214,7 +237,8 @@ async def worker_loop() -> None:
                 with SessionLocal() as db:
                     doc = db.get(Document, doc_id)
                     doc.status = DocStatus.error
-                    doc.error = str(exc)[:2000]
+                    # str(exc) kann leer sein (z.B. httpx.ReadTimeout)
+                    doc.error = (str(exc) or repr(exc))[:2000]
                     db.commit()
             finally:
                 CURRENT = None

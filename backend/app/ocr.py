@@ -13,6 +13,8 @@ from . import config
 async def _chat(
     client: httpx.AsyncClient, content: list | str, max_tokens: int = 8000
 ) -> str:
+    # Grosszügiger Timeout: bei hoher Parallelität sinkt die Rate pro
+    # Anfrage; eine tabellenlastige Seite kann > 30 min brauchen.
     resp = await client.post(
         f'{config.VLLM_URL}/chat/completions',
         json={
@@ -21,7 +23,7 @@ async def _chat(
             'max_tokens': max_tokens,
             'temperature': 0,
         },
-        timeout=1800,
+        timeout=5400,
     )
     resp.raise_for_status()
     return resp.json()['choices'][0]['message']['content']
