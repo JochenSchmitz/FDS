@@ -30,6 +30,7 @@ export interface AppConfig {
 
 export interface ProcessingStatus {
   processing: string[]
+  currentPages: number | null
   pending: number
   modelUp: boolean
   runningRequests: number

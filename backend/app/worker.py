@@ -26,6 +26,10 @@ log = logging.getLogger('worker')
 
 IMAGE_SUFFIXES = ('.png', '.jpg', '.jpeg', '.tif', '.tiff')
 
+# Was der (einzige) Worker WIRKLICH gerade bearbeitet — Quelle der
+# Wahrheit für die Statusanzeige, unabhängig vom DB-Status-Flag.
+CURRENT: dict | None = None
+
 
 def _page_count(pdf: Path) -> int:
     info = subprocess.run(['pdfinfo', str(pdf)], capture_output=True, text=True)
@@ -83,10 +87,12 @@ def _write_results(doc: Document, texts: list[str]) -> str:
 
 
 async def _process(doc_id) -> None:
+    global CURRENT
     with SessionLocal() as db:
         doc = db.get(Document, doc_id)
         original = config.ORIGINALS_DIR / doc.stored_name
         filename = doc.filename
+    CURRENT = {'filename': filename, 'pages': None}
 
     loop = asyncio.get_running_loop()
     sem = asyncio.Semaphore(config.OCR_PARALLEL)
@@ -106,6 +112,7 @@ async def _process(doc_id) -> None:
             async with sem:
                 return await ocr.ocr_page(client, png)
 
+        CURRENT = {'filename': filename, 'pages': len(images)}
         log.info('%s: %d Seiten -> Modell', filename, len(images))
         texts = await asyncio.gather(*(read_page(png) for png in images))
         meta = await ocr.extract_metadata(client, '\n\n'.join(texts))
@@ -133,12 +140,17 @@ async def _process(doc_id) -> None:
 
 
 def _claim_next() -> object | None:
-    """Nächstes wartendes Dokument atomar auf 'processing' setzen."""
+    """Nächstes wartendes Dokument atomar auf 'processing' setzen.
+
+    Sortierung uploaded_at + id: bei Sammel-Uploads mit identischem
+    Zeitstempel bleibt die Reihenfolge trotzdem deterministisch (FIFO,
+    UUID7-IDs sind zeitlich sortiert).
+    """
     with SessionLocal() as db:
         doc = db.scalars(
             select(Document)
             .where(Document.status == DocStatus.pending)
-            .order_by(Document.uploaded_at)
+            .order_by(Document.uploaded_at, Document.id)
             .with_for_update(skip_locked=True)
             .limit(1)
         ).first()
@@ -163,12 +175,18 @@ def _recover_orphans() -> None:
 
 
 async def worker_loop() -> None:
+    global CURRENT
     log.info('Worker gestartet')
     _recover_orphans()
     while True:
         try:
             doc_id = _claim_next()
             if doc_id is None:
+                # Selbstheilung: es gibt nur diesen einen Worker — wenn er
+                # nichts bearbeitet, ist jedes 'processing' in der DB ein
+                # verwaister Rest (z.B. nach Absturz) und wird requeued.
+                CURRENT = None
+                _recover_orphans()
                 await asyncio.sleep(3)
                 continue
             if not await ocr.is_model_up():
@@ -190,6 +208,8 @@ async def worker_loop() -> None:
                     doc.status = DocStatus.error
                     doc.error = str(exc)[:2000]
                     db.commit()
+            finally:
+                CURRENT = None
         except Exception:  # noqa: BLE001
             log.exception('Worker-Schleife: unerwarteter Fehler')
             await asyncio.sleep(10)

@@ -121,22 +121,27 @@ async def _vllm_counters() -> dict:
 
 @app.get('/api/status')
 async def processing_status(user: UserDep, db: SessionDep):
-    """Verarbeitungs-Status für die Live-Anzeige im Frontend."""
+    """Verarbeitungs-Status für die Live-Anzeige im Frontend.
+
+    "Liest gerade" kommt direkt vom Worker (worker.CURRENT), nicht vom
+    Status-Flag in der DB — das Flag kann nach einem Absturz kurzzeitig
+    veraltet sein, der Worker weiß immer, woran er wirklich arbeitet.
+    """
     from sqlalchemy import func, select
 
+    from . import worker
     from .models import DocStatus, Document
 
-    processing = db.scalars(
-        select(Document.filename).where(Document.status == DocStatus.processing)
-    ).all()
+    current = worker.CURRENT
     pending = db.scalar(
         select(func.count())
         .select_from(Document)
-        .where(Document.status == DocStatus.pending)
-    )
+        .where(Document.status.in_((DocStatus.pending, DocStatus.processing)))
+    ) - (1 if current else 0)
     return {
-        'processing': processing,
-        'pending': pending,
+        'processing': [current['filename']] if current else [],
+        'currentPages': current['pages'] if current else None,
+        'pending': max(pending, 0),
         'modelUp': await ocr.is_model_up(),
         **await _vllm_counters(),
     }

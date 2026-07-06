@@ -75,7 +75,10 @@ async function remove(doc: DocumentOut) {
       <span class="pulse" />
       <span v-if="store.status.processing.length">
         Liest gerade: <strong>{{ store.status.processing.join(', ') }}</strong>
-        ({{ store.status.runningRequests }} Seiten parallel)
+        <template v-if="store.status.currentPages">
+          ({{ store.status.currentPages }} Seiten,
+          {{ store.status.runningRequests }} gleichzeitig beim Modell)
+        </template>
       </span>
       <span v-if="store.status.pending">
         · Warteschlange: {{ store.status.pending }}
