@@ -27,15 +27,12 @@ OUT = Path(__file__).parent / 'ergebnisse'
 PARALLEL = 4       # Seiten gleichzeitig (vLLM batcht intern)
 DPI = 200
 
-PROMPT = (
-    'Extrahiere den vollständigen Text dieser gescannten Dokumentseite. '
-    'Gib den Inhalt als sauberes Markdown wieder: Überschriften als '
-    'Überschriften, Tabellen als Markdown-Tabellen, Listen als Listen. '
-    'Gib ausschließlich den Dokumentinhalt aus, keine Kommentare. '
-    'Unleserliche Stellen markiere mit [unleserlich]. '
-    'Logos und Grafiken nicht als Bild-Links einbetten, sondern kurz in '
-    'eckigen Klammern beschreiben, z.B. [Logo: SwS].'
-)
+# Prompt zentral aus dem Backend übernehmen, damit Skript und
+# Web-Anwendung identisch arbeiten.
+import sys as _sys
+
+_sys.path.insert(0, str(Path(__file__).parent))
+from backend.app.config import OCR_PROMPT as PROMPT  # noqa: E402
 
 
 def ocr_image(png: Path) -> str:
@@ -103,8 +100,13 @@ def process(doc: Path) -> None:
         # Netz abrufen wollen; die Konvertierung soll strikt offline sein.
         md_text = re.sub(r'!\[([^\]]*)\]\([^)]*\)', r'[Grafik: \1]',
                          target_md.read_text())
+        app_dir = Path(__file__).parent / 'backend' / 'app'
         pypandoc.convert_text(md_text, 'docx', format='markdown',
-                              outputfile=str(target_docx))
+                              outputfile=str(target_docx),
+                              extra_args=[
+                                  '--lua-filter', str(app_dir / 'pandoc-br.lua'),
+                                  '--reference-doc', str(app_dir / 'reference.docx'),
+                              ])
         print(f'  -> {target_docx}')
 
 

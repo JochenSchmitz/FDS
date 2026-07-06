@@ -51,7 +51,18 @@ OCR_PROMPT = (
     'Gib ausschließlich den Dokumentinhalt aus, keine Kommentare. '
     'Unleserliche Stellen markiere mit [unleserlich]. '
     'Logos und Grafiken nicht als Bild-Links einbetten, sondern kurz in '
-    'eckigen Klammern beschreiben, z.B. [Logo: SwS].'
+    'eckigen Klammern beschreiben, z.B. [Logo: SwS].\n'
+    'Regeln für Tabellen:\n'
+    '- Jede Tabelle als GitHub-Markdown-Pipe-Tabelle: Kopfzeile, dann '
+    'Trennzeile (|---|), dann genau eine Markdown-Zeile pro Tabellenzeile.\n'
+    '- Hat die Tabelle im Original keine Kopfzeile (z.B. ein Formular mit '
+    'Beschriftung links und Inhalt rechts), verwende die Kopfzeile '
+    '| Feld | Inhalt |.\n'
+    '- Mehrere Absätze oder Aufzählungspunkte innerhalb EINER Zelle mit '
+    '<br> trennen, niemals mit echten Zeilenumbrüchen.\n'
+    '- Verbundene Zellen: Wert in der ersten Zelle, restliche Zellen leer.\n'
+    '- Senkrechte Striche im Zellinhalt als \\| maskieren.\n'
+    '- Text, der keine Tabelle ist, nicht in Tabellen pressen.'
 )
 
 METADATA_PROMPT = (

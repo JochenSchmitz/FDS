@@ -82,6 +82,14 @@ def _write_results(doc: Document, texts: list[str]) -> str:
         'docx',
         format='markdown',
         outputfile=str(config.RESULTS_DIR / f'{stem}.docx'),
+        # <br> in Zellen als echte Umbrüche; Referenz-Vorlage mit
+        # sichtbaren Tabellenrahmen (pandoc-Standard hat keine)
+        extra_args=[
+            '--lua-filter',
+            str(Path(__file__).parent / 'pandoc-br.lua'),
+            '--reference-doc',
+            str(Path(__file__).parent / 'reference.docx'),
+        ],
     )
     return stem
 
