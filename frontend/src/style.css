@@ -1,0 +1,72 @@
+:root {
+  --text: #3c3a41;
+  --text-h: #08060d;
+  --text-dim: #8a8791;
+  --bg: #fff;
+  --bg-soft: #f6f5f8;
+  --border: #e5e4e7;
+  --accent: #2563eb;
+  --accent-bg: rgba(37, 99, 235, 0.08);
+  --ok: #16a34a;
+  --warn: #d97706;
+  --err: #dc2626;
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  font: 15px/1.5 var(--sans);
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #c9c7ce;
+    --text-h: #f3f2f6;
+    --text-dim: #86838d;
+    --bg: #141318;
+    --bg-soft: #1e1d24;
+    --border: #2e2d35;
+    --accent: #60a5fa;
+    --accent-bg: rgba(96, 165, 250, 0.12);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+h1, h2, h3 {
+  color: var(--text-h);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+}
+button:hover {
+  border-color: var(--accent);
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+input[type='search'] {
+  font: inherit;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  min-width: 260px;
+}

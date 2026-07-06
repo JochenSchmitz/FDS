@@ -1,0 +1,18 @@
+# Projekt-Tunnel für ngrok v3 (Authtoken kommt aus ~/.config/ngrok/ngrok.yml
+# oder aus der Umgebungsvariable NGROK_AUTHTOKEN, siehe .env).
+# Start: make ngrok  (bzw. ./dev-temux-start.sh)
+#
+# app:        die Weboberfläche unter der reservierten Domain
+# onlyoffice: dynamische URL, damit der Viewer auch über HTTPS/extern
+#             funktioniert — das Backend fragt die zugewiesene URL zur
+#             Laufzeit über die lokale ngrok-API (Port 4040) ab.
+version: 3
+
+endpoints:
+  - name: app
+    url: https://dokumentenkonvertierung.ngrok.io
+    upstream:
+      url: 5175
+  - name: onlyoffice
+    upstream:
+      url: 8082
