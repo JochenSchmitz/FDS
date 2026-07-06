@@ -27,7 +27,15 @@ onMounted(async () => {
       : ['original', 'result']
     for (const side of sides) {
       const viewerConfig = await api.onlyofficeConfig(props.id, side)
-      editors.push(createViewer(`oo-${side}`, viewerConfig))
+      // Original: reiner PDF-Viewer ohne Bedienelemente (embedded);
+      // Ergebnis: voller Editor mit Bearbeitungswerkzeugen (desktop)
+      editors.push(
+        createViewer(
+          `oo-${side}`,
+          viewerConfig,
+          side === 'original' ? 'embedded' : 'desktop',
+        ),
+      )
     }
   } catch (e) {
     error.value = (e as Error).message
@@ -66,7 +74,7 @@ onBeforeUnmount(() => {
         <div v-else id="oo-original" class="oo-host"></div>
       </section>
       <section class="pane">
-        <header>OCR-Ergebnis</header>
+        <header>OCR-Ergebnis (bearbeitbar — Änderungen werden gespeichert)</header>
         <div id="oo-result" class="oo-host"></div>
       </section>
     </div>

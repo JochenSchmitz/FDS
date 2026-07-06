@@ -31,12 +31,13 @@ export function loadDocsApi(onlyofficeUrl: string): Promise<void> {
 export function createViewer(
   elementId: string,
   config: Record<string, unknown>,
+  type: 'desktop' | 'embedded' = 'desktop',
 ): { destroyEditor: () => void } {
   if (!window.DocsAPI) throw new Error('DocsAPI nicht geladen')
   return new window.DocsAPI.DocEditor(elementId, {
     ...config,
     width: '100%',
     height: '100%',
-    type: 'desktop',
+    type,
   })
 }
