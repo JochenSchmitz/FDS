@@ -103,13 +103,11 @@ function fmt(n: number): string {
           <MdiIcon :path="mdiTrayFull" :size="15" />
           Warteschlange: {{ store.status.pending }}
         </span>
-        <span v-if="store.status" class="chip">
+        <span v-if="store.status" class="chip tokens">
           <MdiIcon :path="mdiCounter" :size="15" />
           {{ fmt(store.status.generatedTokens) }} erzeugt ·
-          {{ fmt(store.status.promptTokens) }} verarbeitet
-          <template v-if="store.tokensPerSecond">
-            · {{ store.tokensPerSecond }}/s
-          </template>
+          {{ fmt(store.status.promptTokens) }} verarbeitet ·
+          {{ store.tokensPerSecond }}/s
         </span>
       </template>
       <span class="spacer" />
@@ -220,7 +218,8 @@ main {
   color: var(--text);
   border-color: var(--accent);
 }
-.chip.version {
+.chip.version,
+.chip.tokens {
   font-variant-numeric: tabular-nums;
 }
 .pulse {
