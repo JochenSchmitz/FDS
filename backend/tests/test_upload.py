@@ -96,3 +96,52 @@ def test_unbekannter_typ_wird_abgelehnt():
         data = resp.json()
         assert data['created'] == []
         assert 'nicht unterstützt' in data['skipped'][0]['reason']
+
+
+def test_defektes_zip_wird_per_fallback_gerettet():
+    """OneDrive-Symptom: zentrales Verzeichnis fehlt/defekt — zipfile
+    lehnt ab, der stream-unzip-Fallback rettet die Dateien trotzdem."""
+    with TestClient(app) as client:
+        _login(client)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(
+                'Akte/eins.pdf', b'%PDF-fallback-' + os.urandom(16).hex().encode()
+            )
+            zf.writestr(
+                'Akte/zwei.pdf', b'%PDF-fallback-' + os.urandom(16).hex().encode()
+            )
+        data_bytes = buf.getvalue()
+        kaputt = data_bytes[: data_bytes.index(b'PK\x01\x02')]
+
+        resp = client.post(
+            '/api/documents',
+            files=[('files', ('onedrive.zip', kaputt, 'application/zip'))],
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        try:
+            assert [d['filename'] for d in data['created']] == ['eins.pdf', 'zwei.pdf']
+            assert all(d['tags'] == ['Akte'] for d in data['created'])
+            # Hinweis, dass das Archiv defekt war und wie viel gerettet wurde
+            assert len(data['skipped']) == 1
+            assert 'nach 2 geretteten Dateien' in data['skipped'][0]['reason']
+        finally:
+            for d in data['created']:
+                assert client.delete(f'/api/documents/{d["id"]}').status_code == 204
+
+
+def test_leeres_und_falsches_zip_bekommen_diagnose():
+    with TestClient(app) as client:
+        _login(client)
+        resp = client.post(
+            '/api/documents',
+            files=[('files', ('platzhalter.zip', b'', 'application/zip'))],
+        )
+        assert '0 Bytes' in resp.json()['skipped'][0]['reason']
+
+        resp = client.post(
+            '/api/documents',
+            files=[('files', ('seite.zip', b'<html>Fehler</html>', 'application/zip'))],
+        )
+        assert 'keine ZIP-Signatur' in resp.json()['skipped'][0]['reason']

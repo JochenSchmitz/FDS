@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -16,6 +17,7 @@ from ..models import DocStatus, Document, Page
 from ..schemas import DocumentDetail, DocumentOut, UploadResult, UploadSkipped
 
 router = APIRouter(prefix='/api/documents', tags=['documents'])
+log = logging.getLogger('upload')
 
 ALLOWED_SUFFIXES = {
     '.pdf',
@@ -127,13 +129,147 @@ def _fix_zip_name(info: zipfile.ZipInfo) -> str:
     """
     if info.flag_bits & 0x800:
         return info.filename
-    raw = info.filename.encode('cp437')
+    return _decode_zip_name(info.filename.encode('cp437'))
+
+
+def _decode_zip_name(raw: bytes) -> str:
     for enc in ('utf-8', 'cp850'):
         try:
             return raw.decode(enc)
         except UnicodeDecodeError:
             continue
-    return info.filename
+    return raw.decode('cp437', errors='replace')
+
+
+def _is_zip_junk(path: PurePosixPath) -> bool:
+    """macOS-Metadaten im Archiv sind keine Dokumente."""
+    return (
+        '__MACOSX' in path.parts
+        or path.name.startswith('._')
+        or path.name == '.DS_Store'
+    )
+
+
+def _check_member_suffix(path: PurePosixPath) -> UploadSkipped | None:
+    suffix = path.suffix.lower()
+    if suffix == '.zip':
+        return UploadSkipped(
+            filename=str(path), reason='ZIP im ZIP wird nicht unterstützt'
+        )
+    if suffix not in ALLOWED_SUFFIXES:
+        return UploadSkipped(
+            filename=str(path),
+            reason=f'Dateityp {suffix or "(ohne Endung)"} wird nicht unterstützt',
+        )
+    return None
+
+
+def _folder_tags(path: PurePosixPath) -> list[str]:
+    return [p.strip() for p in path.parts[:-1] if p.strip()]
+
+
+def _zip_diagnosis(stream: BinaryIO, exc: Exception) -> str:
+    """Möglichst konkreter Grund, warum ein ZIP nicht lesbar ist."""
+    stream.seek(0, 2)
+    size = stream.tell()
+    stream.seek(0)
+    head = stream.read(4)
+    stream.seek(0)
+    if size == 0:
+        return (
+            'Datei ist leer (0 Bytes) — vermutlich ein nicht heruntergeladener '
+            'Cloud-Platzhalter oder ein abgebrochener Download'
+        )
+    if not head.startswith(b'PK'):
+        return (
+            f'keine ZIP-Signatur am Dateianfang ({size} Bytes) — '
+            'die Datei ist kein ZIP-Archiv oder beschädigt'
+        )
+    return f'ZIP-Archiv ist defekt oder unvollständig ({size} Bytes; {exc})'
+
+
+class _ChunkStream:
+    """Macht aus dem Chunk-Generator von stream-unzip ein read()-Objekt."""
+
+    def __init__(self, chunks):
+        self._chunks = iter(chunks)
+        self._buf = bytearray()
+
+    def read(self, n: int = -1) -> bytes:
+        while n < 0 or len(self._buf) < n:
+            chunk = next(self._chunks, None)
+            if chunk is None:
+                break
+            self._buf.extend(chunk)
+        if n < 0:
+            n = len(self._buf)
+        out = bytes(self._buf[:n])
+        del self._buf[:n]
+        return out
+
+
+def _ingest_zip_fallback(
+    db: Session, zip_name: str, stream: BinaryIO, seen: set[str], bad: Exception
+) -> tuple[list[Document], list[UploadSkipped]]:
+    """Rettungsweg für Archive, die zipfile ablehnt.
+
+    OneDrive/SharePoint erzeugen bei Sammel-Downloads über 4 GB formal
+    defekte ZIPs (kaputtes zentrales Verzeichnis). stream-unzip liest —
+    wie 7-Zip — die lokalen Dateiköpfe sequenziell und kommt damit
+    trotzdem an den Inhalt. Bricht das Archiv mittendrin ab, bleiben
+    die bis dahin geretteten Dokumente erhalten.
+    """
+    from stream_unzip import stream_unzip
+
+    created: list[Document] = []
+    skipped: list[UploadSkipped] = []
+    stream.seek(0)
+
+    def chunks():
+        while chunk := stream.read(1 << 20):
+            yield chunk
+
+    try:
+        for raw_name, _size, data in stream_unzip(chunks()):
+            name = _decode_zip_name(raw_name).replace('\\', '/')
+            path = PurePosixPath(name)
+            if name.endswith('/') or _is_zip_junk(path):
+                for _ in data:  # Eintrag vollständig überspringen
+                    pass
+                continue
+            skip = _check_member_suffix(path)
+            if skip is not None:
+                skipped.append(skip)
+                for _ in data:
+                    pass
+                continue
+            doc, reason = _ingest(
+                db,
+                path.name,
+                path.suffix.lower(),
+                _ChunkStream(data),
+                _folder_tags(path),
+                seen,
+            )
+            if doc is not None:
+                created.append(doc)
+            else:
+                skipped.append(UploadSkipped(filename=str(path), reason=reason or ''))
+    except Exception as exc:  # noqa: BLE001 — defektes Archiv: Teilergebnis behalten
+        log.warning('ZIP %s: Fallback-Lesen abgebrochen: %r', zip_name, exc)
+        if created:
+            skipped.append(
+                UploadSkipped(
+                    filename=zip_name,
+                    reason=f'Archiv defekt — nach {len(created)} geretteten '
+                    f'Dateien abgebrochen ({str(exc) or type(exc).__name__})',
+                )
+            )
+        else:
+            skipped.append(
+                UploadSkipped(filename=zip_name, reason=_zip_diagnosis(stream, bad))
+            )
+    return created, skipped
 
 
 def _ingest_zip(
@@ -145,41 +281,26 @@ def _ingest_zip(
     skipped: list[UploadSkipped] = []
     try:
         archive = zipfile.ZipFile(stream)
-    except zipfile.BadZipFile:
-        return [], [UploadSkipped(filename=zip_name, reason='kein gültiges ZIP-Archiv')]
+    except zipfile.BadZipFile as exc:
+        log.warning(
+            'ZIP %s: zipfile scheitert (%s) — versuche stream-unzip', zip_name, exc
+        )
+        return _ingest_zip_fallback(db, zip_name, stream, seen, exc)
     with archive:
         for info in archive.infolist():
             if info.is_dir():
                 continue
             path = PurePosixPath(_fix_zip_name(info).replace('\\', '/'))
-            # macOS-Metadaten im Archiv sind keine Dokumente
-            if (
-                '__MACOSX' in path.parts
-                or path.name.startswith('._')
-                or path.name == '.DS_Store'
-            ):
+            if _is_zip_junk(path):
                 continue
-            suffix = path.suffix.lower()
-            if suffix == '.zip':
-                skipped.append(
-                    UploadSkipped(
-                        filename=str(path),
-                        reason='ZIP im ZIP wird nicht unterstützt',
-                    )
-                )
+            skip = _check_member_suffix(path)
+            if skip is not None:
+                skipped.append(skip)
                 continue
-            if suffix not in ALLOWED_SUFFIXES:
-                skipped.append(
-                    UploadSkipped(
-                        filename=str(path),
-                        reason=f'Dateityp {suffix or "(ohne Endung)"} '
-                        'wird nicht unterstützt',
-                    )
-                )
-                continue
-            folder_tags = [p.strip() for p in path.parts[:-1] if p.strip()]
             with archive.open(info) as member:
-                doc, reason = _ingest(db, path.name, suffix, member, folder_tags, seen)
+                doc, reason = _ingest(
+                    db, path.name, path.suffix.lower(), member, _folder_tags(path), seen
+                )
             if doc is not None:
                 created.append(doc)
             else:
