@@ -27,7 +27,7 @@ async function submit() {
 <template>
   <div class="login-wrap">
     <form class="login" @submit.prevent="submit">
-      <h1>📄 Dokumente-OCR</h1>
+      <h1>📄 FDS — FES Dokumenten Service</h1>
       <p class="hint">Bitte anmelden — die Sitzung gilt 7 Tage.</p>
       <label>
         E-Mail

@@ -14,7 +14,7 @@ agent:
 
 endpoints:
   - name: app
-    url: https://dokumentenkonvertierung.ngrok.io
+    url: https://fds.ngrok.app
     upstream:
       url: 5175
   - name: onlyoffice

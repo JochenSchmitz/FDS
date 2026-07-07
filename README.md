@@ -1,4 +1,4 @@
-# Dokumenten-Konvertierung (OCR-Pipeline mit Weboberfläche)
+# FDS — FES Dokumenten Service
 
 Komplette Pipeline: Dokumente im Browser hochladen → Texterkennung durch ein
 Vision-Modell → Verschlagwortung/Zusammenfassung/Dokumentdatum automatisch →
@@ -24,7 +24,7 @@ Schlagwort **Unlesbar**.
 
 Weboberfläche: lokal **http://localhost:5175** (Vite) bzw. **http://172.31.102.13:8020**
 (Backend liefert den letzten `npm run build`-Stand), extern
-**https://dokumentenkonvertierung.ngrok.io** (ngrok, Bezahl-Account).
+**https://fds.ngrok.app** (ngrok, Bezahl-Account).
 
 **Anmeldung:** Alle API-Endpunkte und die Oberfläche erfordern einen Login.
 Die Benutzer (E-Mail + Passwort) stehen in der `.env` (`AUTH_USERS`);
@@ -42,7 +42,7 @@ Laufzeit über die lokale ngrok-API (Port 4043, in `ngrok.yml` gepinnt —
 
 | Komponente | Technik | Wo |
 |---|---|---|
-| Datenbank | Postgres 18.3 (Docker, `tildeai-db`) | Port 5435, User/DB `dokumente` |
+| Datenbank | Postgres 18.3 (Docker, `fds-db`) | Port 5435, User/DB `dokumente` |
 | Backend + Worker | FastAPI/Uvicorn, SQLAlchemy, UUID7 | Port 8020, Code in `backend/` |
 | Frontend | Vite + Vue 3 + TypeScript + Pinia | `frontend/` (Build wird vom Backend ausgeliefert) |
 | Viewer | OnlyOffice Document Server (bestehender Container) | Port 8082, JWT-signierte Configs |
@@ -51,7 +51,7 @@ Laufzeit über die lokale ngrok-API (Port 4043, in `ngrok.yml` gepinnt —
 Makefile-Targets: `make backend` / `frontend` / `ngrok` / `infra-up` /
 `infra-down` / `quality` (ruff + pytest) / `format` / `test` / `install`.
 Versionierter Commit-Helfer: `./commit.sh "Nachricht"` (pflegt `VERSION`).
-Git-Remote: https://github.com/JochenSchmitz/DokumentenKonvertierung
+Git-Remote: https://github.com/JochenSchmitz/FDS
 
 Frontend-Entwicklung mit Hot-Reload: `cd frontend && npm run dev`
 (Port 5175, proxied `/api` zum Backend); danach `npm run build`, damit das
@@ -90,7 +90,10 @@ Ollama-Systemdienst dauerhaft ~22 GB des Unified Memory belegt.
 
 ## Historie
 
-Das Projekt begann als Test-Setup für TildeOpen-30b (daher der
-Verzeichnisname und der DB-Containername `tildeai-db`); dieser Test wurde
-entfernt und wird ggf. später separat wieder aufgenommen (Stand: Juli 2026,
-zuletzt enthalten bis Version 0.1.11 / Commit `5f9bc72`).
+Das Projekt begann als Test-Setup für TildeOpen-30b (Verzeichnis
+`TestTildeAi`, DB-Container `tildeai-db`, Repo `DokumentenKonvertierung`);
+der Tilde-Test wurde entfernt und wird ggf. später separat wieder
+aufgenommen (zuletzt enthalten bis Version 0.1.11 / Commit `5f9bc72`).
+Im Juli 2026 wurde das Projekt komplett in **FDS — FES Dokumenten
+Service** umbenannt (Verzeichnis `FDS`, Container `fds-db`, Domain
+`fds.ngrok.app`).

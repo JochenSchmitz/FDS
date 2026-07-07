@@ -1,9 +1,15 @@
+# FDS — FES Dokumenten Service
+#
 # OCR-Modell als Profil (Gewichte ~34 GB, das Laden dauert Minuten):
 #   docker compose --profile ocr up -d    # OCR/Vision -> Port 8012
 #   docker compose --profile ocr down     # stoppen
 #
 # Der pip-Fix behebt einen Bug im 26.06-Image: instrumentator 8.0.0
 # ist inkompatibel mit FastAPI 0.137 (alle Requests -> HTTP 500).
+
+# Fester Projektname: Volume- und Netzwerknamen (fds_pgdata) hängen
+# damit nicht am Verzeichnisnamen.
+name: fds
 x-vllm-common: &vllm-common
   image: nvcr.io/nvidia/vllm:26.06-py3
   restart: unless-stopped
@@ -31,7 +37,7 @@ services:
   # Postgres 18 bringt uuidv7() nativ mit — passt zur UUID7-Konvention.
   db:
     image: postgres:18.3
-    container_name: tildeai-db
+    container_name: fds-db
     restart: unless-stopped
     environment:
       # Werte kommen aus .env (docker compose lädt sie automatisch)

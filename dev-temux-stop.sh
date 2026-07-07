@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SESSION_NAME="${SESSION_NAME:-dokkonv-dev}"
+SESSION_NAME="${SESSION_NAME:-fds-dev}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 stop_matching_processes() {
@@ -40,5 +40,5 @@ stop_matching_processes KILL
 
 if command -v docker >/dev/null 2>&1; then
   docker compose -f "${PROJECT_ROOT}/docker-compose.yml" --profile ocr stop >/dev/null 2>&1 || true
-  echo "Docker-Container tildeai-db und qwen-ocr-vllm wurden gestoppt."
+  echo "Docker-Container fds-db und qwen-ocr-vllm wurden gestoppt."
 fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Startet die komplette Dokumenten-OCR-Anwendung:
+# Startet den kompletten FES Dokumenten Service (FDS):
 # Postgres + OCR-Modell (Docker) und das FastAPI-Backend (Vordergrund).
 # Beenden mit Strg+C (die Container laufen weiter).
 set -euo pipefail

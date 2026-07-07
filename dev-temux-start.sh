@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SESSION_NAME="${SESSION_NAME:-dokkonv-dev}"
+SESSION_NAME="${SESSION_NAME:-fds-dev}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NODE_BIN_DIR="${NODE_BIN_DIR:-$HOME/.local/bin}"
 
@@ -65,7 +65,7 @@ tmux new-window \
   "export PATH='${DEV_PATH}'; make ngrok"
 
 echo "Backend, Frontend und ngrok-Tunnel laufen in tmux-Session ${SESSION_NAME}."
-echo "Postgres + OCR-Modell laufen als Docker-Container (tildeai-db, qwen-ocr-vllm)."
+echo "Postgres + OCR-Modell laufen als Docker-Container (fds-db, qwen-ocr-vllm)."
 echo "  Lokal:   http://localhost:5175"
-echo "  Extern:  https://dokumentenkonvertierung.ngrok.io"
+echo "  Extern:  https://fds.ngrok.app"
 echo "Anzeigen: tmux attach -t ${SESSION_NAME}"
