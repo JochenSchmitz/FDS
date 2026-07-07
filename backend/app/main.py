@@ -103,7 +103,7 @@ async def lifespan(app: FastAPI):
         task.cancel()
 
 
-app = FastAPI(title='FDS — FES Dokumenten Service', lifespan=lifespan)
+app = FastAPI(title='FDS — FES Dokumentenservice', lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

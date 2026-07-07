@@ -1,4 +1,4 @@
-# FDS — FES Dokumenten Service
+# FDS — FES Dokumentenservice
 
 Komplette Pipeline: Dokumente im Browser hochladen → Texterkennung durch ein
 Vision-Modell → Verschlagwortung/Zusammenfassung/Dokumentdatum automatisch →
@@ -94,6 +94,6 @@ Das Projekt begann als Test-Setup für TildeOpen-30b (Verzeichnis
 `TestTildeAi`, DB-Container `tildeai-db`, Repo `DokumentenKonvertierung`);
 der Tilde-Test wurde entfernt und wird ggf. später separat wieder
 aufgenommen (zuletzt enthalten bis Version 0.1.11 / Commit `5f9bc72`).
-Im Juli 2026 wurde das Projekt komplett in **FDS — FES Dokumenten
-Service** umbenannt (Verzeichnis `FDS`, Container `fds-db`, Domain
-`fds.ngrok.app`).
+Im Juli 2026 wurde das Projekt komplett in **FDS — FES
+Dokumentenservice** umbenannt (Verzeichnis `FDS`, Container `fds-db`,
+Domain `fds.ngrok.app`).

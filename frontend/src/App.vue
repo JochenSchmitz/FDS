@@ -66,7 +66,7 @@ function fmt(n: number): string {
   <Transition name="splash">
     <div v-if="splash" class="splash">
       <img src="/logo.png" alt="FES Logo" />
-      <span>FDS — FES Dokumenten Service</span>
+      <span>FDS — FES Dokumentenservice</span>
     </div>
   </Transition>
 
@@ -74,7 +74,7 @@ function fmt(n: number): string {
     <header class="topbar">
       <img src="/logo.png" alt="FES Logo" class="header-logo" />
       <button class="brand" title="Seite neu laden" @click="reload">
-        FDS
+        FDS — FES Dokumentenservice
       </button>
       <span class="spacer" />
       <button v-if="auth.loggedIn" class="logout" @click="logout">
