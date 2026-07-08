@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { mdiClose, mdiMagnify, mdiTagOutline } from '@mdi/js'
+import { mdiClose, mdiMagnify, mdiMenuDown, mdiMenuUp, mdiTagOutline } from '@mdi/js'
 import MdiIcon from '../components/MdiIcon.vue'
 import { useDocumentsStore } from '../stores/documents'
+import type { DocumentOut } from '../api'
 
 const store = useDocumentsStore()
 
@@ -28,12 +29,56 @@ onUnmounted(() => {
   if (debounce) clearTimeout(debounce)
 })
 
+// ── Sortierung: Klick auf Spaltenkopf, zweiter Klick dreht die Richtung ──
+type SortKey = 'filename' | 'page_count' | 'doc_date' | 'tags' | 'uploaded_at'
+const sortKey = ref<SortKey>('uploaded_at') // Standard: neueste Importe oben
+const sortDir = ref<1 | -1>(-1)
+
+function setSort(key: SortKey) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 1 ? -1 : 1
+  } else {
+    sortKey.value = key
+    // Texte initial aufsteigend, Zahlen/Daten absteigend (Neuestes zuerst)
+    sortDir.value = key === 'filename' || key === 'tags' ? 1 : -1
+  }
+}
+
+function compare(a: DocumentOut, b: DocumentOut): number {
+  switch (sortKey.value) {
+    case 'filename':
+      return stem(a.filename).localeCompare(stem(b.filename), 'de', {
+        sensitivity: 'base',
+      })
+    case 'page_count':
+      return (a.page_count ?? -1) - (b.page_count ?? -1)
+    case 'doc_date':
+      return (a.doc_date ?? '').localeCompare(b.doc_date ?? '')
+    case 'tags':
+      return a.tags.join(', ').localeCompare(b.tags.join(', '), 'de', {
+        sensitivity: 'base',
+      })
+    case 'uploaded_at':
+      return a.uploaded_at.localeCompare(b.uploaded_at)
+  }
+}
+
 const doneDocs = computed(() =>
-  (store.results ?? store.docs).filter((d) => d.status === 'done'),
+  (store.results ?? store.docs)
+    .filter((d) => d.status === 'done')
+    .slice()
+    .sort((a, b) => sortDir.value * compare(a, b)),
 )
 
 function fmtDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString('de-DE') : '—'
+}
+
+function fmtDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('de-DE', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  })
 }
 
 /** Dateiname ohne Endung — angezeigt wird ohnehin nur die .docx. */
@@ -78,10 +123,26 @@ function stem(name: string): string {
       <table v-if="doneDocs.length">
         <thead>
           <tr>
-            <th>Dokument</th>
-            <th>Seiten</th>
-            <th>Dok.-Datum</th>
-            <th>Schlagworte</th>
+            <th
+              v-for="col in ([
+                ['filename', 'Dokument'],
+                ['page_count', 'Seiten'],
+                ['doc_date', 'Dok.-Datum'],
+                ['uploaded_at', 'Importiert am'],
+                ['tags', 'Schlagworte'],
+              ] as [SortKey, string][])"
+              :key="col[0]"
+              class="sortable"
+              :title="`Nach ${col[1]} sortieren`"
+              @click="setSort(col[0])"
+            >
+              {{ col[1] }}
+              <MdiIcon
+                v-if="sortKey === col[0]"
+                :path="sortDir === 1 ? mdiMenuUp : mdiMenuDown"
+                :size="16"
+              />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -96,6 +157,7 @@ function stem(name: string): string {
             </td>
             <td>{{ doc.page_count ?? '—' }}</td>
             <td>{{ fmtDate(doc.doc_date) }}</td>
+            <td class="imported">{{ fmtDateTime(doc.uploaded_at) }}</td>
             <td>
               <button
                 v-for="tag in doc.tags"
@@ -172,6 +234,21 @@ th {
   position: sticky;
   top: 0;
   background: var(--bg);
+}
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+th.sortable:hover {
+  color: var(--text);
+}
+th.sortable :deep(svg) {
+  vertical-align: -3px;
+}
+.imported {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 td {
   border-bottom: 1px solid var(--border);
