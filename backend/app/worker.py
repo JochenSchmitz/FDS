@@ -535,6 +535,27 @@ async def worker_loop() -> None:
     _recover_orphans()
     while True:
         try:
+            # Vorrang für den einmaligen Nachlauf: solange es fertige
+            # Alt-Dokumente ohne Entitäten-Versuch gibt, werden ERST diese
+            # auf Beteiligte untersucht (nur ein Modell-Aufruf aus dem
+            # gespeicherten Text, kein OCR) — die OCR-Queue pausiert so lange.
+            # Ist der Bestand nachgezogen, greift _claim_entity_backfill() ins
+            # Leere und der normale OCR-Betrieb läuft von selbst weiter.
+            backfill_id = _claim_entity_backfill()
+            if backfill_id is not None:
+                if not await ocr.is_model_up():
+                    CURRENT = None
+                    await asyncio.sleep(15)
+                    continue
+                try:
+                    await _backfill_entities(backfill_id)
+                except Exception:  # noqa: BLE001
+                    log.exception('Entitäten-Backfill fehlgeschlagen')
+                    _mark_entities_attempted(backfill_id)
+                finally:
+                    CURRENT = None
+                continue
+
             doc_id = _claim_next()
             if doc_id is None:
                 # Selbstheilung: es gibt nur diesen einen Worker — wenn er
@@ -542,19 +563,6 @@ async def worker_loop() -> None:
                 # verwaister Rest (z.B. nach Absturz) und wird requeued.
                 CURRENT = None
                 _recover_orphans()
-                # Leerlauf nutzen: Beteiligte für Alt-Dokumente nachtragen.
-                # Nur wenn die Queue leer ist, damit neue Uploads Vorrang
-                # haben und das Modell nicht doppelt belastet wird.
-                backfill_id = _claim_entity_backfill()
-                if backfill_id is not None and await ocr.is_model_up():
-                    try:
-                        await _backfill_entities(backfill_id)
-                    except Exception:  # noqa: BLE001
-                        log.exception('Entitäten-Backfill fehlgeschlagen')
-                        _mark_entities_attempted(backfill_id)
-                    finally:
-                        CURRENT = None
-                    continue
                 await asyncio.sleep(3)
                 continue
             if not await ocr.is_model_up():
