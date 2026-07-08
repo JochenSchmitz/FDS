@@ -71,7 +71,7 @@ services:
       vllm serve Qwen/Qwen3-VL-32B-Instruct-FP8
       --host 0.0.0.0
       --port 8000
-      --max-model-len 16384
+      --max-model-len 65536
       --gpu-memory-utilization 0.60"
 
 volumes:

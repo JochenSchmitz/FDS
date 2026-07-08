@@ -53,11 +53,12 @@ async def extract_metadata(client: httpx.AsyncClient, full_text: str) -> dict:
 
     Die Zeichen-Obergrenze ist nur eine Heuristik: zahlenlastige
     Tabellen (Leistungsverzeichnisse!) tokenisieren mit ~1,1 Token pro
-    Zeichen statt ~0,4 und sprengen dann das 16k-Kontextfenster
-    (HTTP 400). In dem Fall wird der Text schrittweise gekürzt.
+    Zeichen statt ~0,4 und sprengen dann das Kontextfenster (HTTP 400,
+    64k seit --max-model-len 65536). In dem Fall wird der Text
+    schrittweise gekürzt.
     """
     raw = ''
-    for cap in (15000, 8000, 4000):
+    for cap in (40000, 15000, 4000):
         try:
             raw = await _chat(
                 client, config.METADATA_PROMPT + full_text[:cap], max_tokens=1000
