@@ -143,7 +143,10 @@ async def _onlyoffice_public_url() -> str:
 
 
 async def _vllm_counters() -> dict:
-    """Lebenszeichen des Modells aus den vLLM-Prometheus-Metriken."""
+    """Lebenszeichen des Modells aus den vLLM-Prometheus-Metriken —
+    über ALLE Endpunkte (beide GB10) summiert."""
+    import asyncio
+
     import httpx
 
     counters = {
@@ -158,17 +161,25 @@ async def _vllm_counters() -> dict:
         'vllm:generation_tokens_total': 'generatedTokens',
         'vllm:prompt_tokens_total': 'promptTokens',
     }
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                config.VLLM_URL.removesuffix('/v1') + '/metrics', timeout=2
-            )
-        for line in resp.text.splitlines():
+
+    async def _fetch(base: str) -> str:
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    base.removesuffix('/v1') + '/metrics', timeout=2
+                )
+            return resp.text
+        except httpx.HTTPError:
+            return ''
+
+    for text in await asyncio.gather(*(_fetch(e) for e in config.VLLM_ENDPOINTS)):
+        for line in text.splitlines():
             for prefix, key in wanted.items():
                 if line.startswith(prefix):
-                    counters[key] += int(float(line.rsplit(' ', 1)[-1]))
-    except httpx.HTTPError, ValueError:
-        pass
+                    try:
+                        counters[key] += int(float(line.rsplit(' ', 1)[-1]))
+                    except ValueError:
+                        pass
     return counters
 
 

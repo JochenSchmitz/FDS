@@ -20,6 +20,15 @@ DATABASE_URL = os.environ.get(
 
 VLLM_URL = os.environ.get('VLLM_URL', 'http://localhost:8012/v1')
 VLLM_MODEL = os.environ.get('VLLM_MODEL', 'Qwen/Qwen3-VL-32B-Instruct-FP8')
+# Reale Modell-Endpunkte (kommagetrennt) für Health/Token-Metriken. Die
+# Inferenz läuft über VLLM_URL (im Mehr-GPU-Betrieb der haproxy-LB); für
+# Verfügbarkeit und Token-Zähler fragen wir dagegen die echten vLLMs
+# einzeln ab und summieren. Default: der eine VLLM_URL.
+VLLM_ENDPOINTS = [
+    e.strip()
+    for e in os.environ.get('VLLM_ENDPOINTS', VLLM_URL).split(',')
+    if e.strip()
+]
 
 ONLYOFFICE_URL = os.environ.get('ONLYOFFICE_URL', f'http://{PUBLIC_HOST}:8082')
 ONLYOFFICE_JWT_SECRET = os.environ.get(

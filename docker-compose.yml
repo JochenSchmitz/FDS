@@ -74,5 +74,18 @@ services:
       --max-model-len 65536
       --gpu-memory-utilization 0.60"
 
+  # Load-Balancer vor beide vLLM-OCR-Endpunkte: vip lokal (127.0.0.1:8012)
+  # + zweiter GB10 tbv-server (172.31.102.12:8012). Verteilt einzelne
+  # Anfragen (jede OCR-Seite = eine Anfrage) per least-connection über beide
+  # GPUs; das Backend spricht nur diesen Proxy an (VLLM_URL -> :8013).
+  # Host-Netz: bindet :8013 und erreicht beide Backends direkt.
+  vllm-lb:
+    image: haproxytech/haproxy-alpine:3.0
+    container_name: fds-vllm-lb
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+
 volumes:
   pgdata:

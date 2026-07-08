@@ -1,5 +1,6 @@
 """Anbindung an das Vision-Modell (vLLM, OpenAI-kompatible API)."""
 
+import asyncio
 import base64
 import datetime
 import json
@@ -173,12 +174,17 @@ async def extract_entities(client: httpx.AsyncClient, full_text: str) -> list[di
     return out
 
 
-async def is_model_up() -> bool:
+async def _endpoint_up(base: str) -> bool:
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                config.VLLM_URL.removesuffix('/v1') + '/health', timeout=5
-            )
+            resp = await client.get(base.removesuffix('/v1') + '/health', timeout=5)
             return resp.status_code == 200
     except httpx.HTTPError:
         return False
+
+
+async def is_model_up() -> bool:
+    """Läuft mindestens ein Modell-Endpunkt? Der LB routet ohnehin nur auf
+    gesunde Backends; solange einer lebt, kann verarbeitet werden."""
+    results = await asyncio.gather(*(_endpoint_up(e) for e in config.VLLM_ENDPOINTS))
+    return any(results)
