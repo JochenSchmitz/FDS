@@ -467,43 +467,94 @@ def _claim_next() -> object | None:
         return doc.id
 
 
-def _claim_entity_backfill() -> object | None:
-    """Ein fertiges Dokument ohne Entitäten-Extraktion greifen (Bestand).
+# IDs, die gerade von einem Konsumenten bearbeitet werden. Der Claim läuft
+# synchron (ohne await), daher ziehen nebenläufige Konsumenten im selben
+# Prozess nie dasselbe Dokument. entities_at bleibt bis zum Abschluss NULL
+# und markiert echt „fertig untersucht", nicht bloß „vergeben".
+_backfill_in_flight: set = set()
 
-    Kandidat = status 'done' und entities_at IS NULL. Nach dem Versuch
-    wird entities_at gesetzt, daher wird jedes Dokument höchstens einmal
-    aufgegriffen — auch wenn niemand gefunden wurde.
-    """
+
+def _has_entity_backfill() -> bool:
+    """Gibt es fertige Dokumente, die noch nicht auf Beteiligte
+    untersucht wurden?"""
     with SessionLocal() as db:
-        doc = db.scalars(
-            select(Document)
+        return (
+            db.scalar(
+                select(Document.id)
+                .where(
+                    Document.status == DocStatus.done,
+                    Document.entities_at.is_(None),
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
+
+def _claim_one_entity_backfill() -> object | None:
+    """Nächstes noch nicht in Arbeit befindliches Alt-Dokument greifen."""
+    with SessionLocal() as db:
+        ids = db.scalars(
+            select(Document.id)
             .where(Document.status == DocStatus.done, Document.entities_at.is_(None))
             .order_by(Document.processed_at.desc().nullslast(), Document.id)
-            .limit(1)
-        ).first()
-        return None if doc is None else doc.id
+            .limit(64)
+        ).all()
+    for cid in ids:
+        if cid not in _backfill_in_flight:
+            _backfill_in_flight.add(cid)
+            return cid
+    return None
 
 
-async def _backfill_entities(doc_id) -> None:
-    """Beteiligte für ein Alt-Dokument aus dem GESPEICHERTEN Seitentext
-    nachtragen — kein erneutes OCR, nur ein Sprachmodell-Aufruf."""
-    global CURRENT
+async def _backfill_one_entities(client: httpx.AsyncClient, doc_id) -> None:
+    """Beteiligte für EIN Alt-Dokument aus dem GESPEICHERTEN Seitentext
+    nachtragen — kein erneutes OCR, nur ein Sprachmodell-Aufruf.
+
+    Die DB-Sitzungen sind bewusst kurz: gelesen wird VOR, geschrieben NACH
+    dem Modell-Aufruf, damit bei Nebenläufigkeit keine Verbindung über den
+    langen Aufruf hinweg belegt bleibt (Pool-Erschöpfung vermeiden).
+    """
     with SessionLocal() as db:
         doc = db.get(Document, doc_id)
         filename = doc.filename
         texts = [p.content_md for p in doc.pages]
     full_text = '\n\n'.join(texts)
-    CURRENT = {'id': str(doc_id), 'filename': f'{filename} (Beteiligte)', 'pages': None}
     entities: list[dict] = []
     if full_text.strip():
-        async with httpx.AsyncClient() as client:
-            entities = await ocr.extract_entities(client, full_text)
+        entities = await ocr.extract_entities(client, full_text)
     with SessionLocal() as db:
         doc = db.get(Document, doc_id)
         doc.entities = _entity_rows(entities)
         doc.entities_at = datetime.datetime.now(datetime.UTC)
         db.commit()
     log.info('%s: %d Beteiligte nachgetragen', filename, len(entities))
+
+
+async def _run_entity_backfill() -> None:
+    """Alt-Bestand nebenläufig auf Beteiligte untersuchen, bis nichts mehr
+    offen ist. ENTITY_PARALLEL Konsumenten ziehen je genau EIN Dokument und
+    holen sofort das nächste — kein Batch-Barrier, das Modell bleibt
+    durchgehend ausgelastet. Ein Einzelfehler markiert nur dieses Dokument
+    als versucht und stoppt den Pool nicht."""
+    global CURRENT
+    CURRENT = {'id': '', 'filename': 'Beteiligte werden nachgetragen …', 'pages': None}
+
+    async def consumer(client: httpx.AsyncClient) -> None:
+        while True:
+            doc_id = _claim_one_entity_backfill()
+            if doc_id is None:
+                return
+            try:
+                await _backfill_one_entities(client, doc_id)
+            except Exception:  # noqa: BLE001
+                log.exception('Entitäten-Backfill fehlgeschlagen (%s)', doc_id)
+                _mark_entities_attempted(doc_id)
+            finally:
+                _backfill_in_flight.discard(doc_id)
+
+    async with httpx.AsyncClient() as client:
+        await asyncio.gather(*(consumer(client) for _ in range(config.ENTITY_PARALLEL)))
 
 
 def _mark_entities_attempted(doc_id) -> None:
@@ -539,19 +590,15 @@ async def worker_loop() -> None:
             # Alt-Dokumente ohne Entitäten-Versuch gibt, werden ERST diese
             # auf Beteiligte untersucht (nur ein Modell-Aufruf aus dem
             # gespeicherten Text, kein OCR) — die OCR-Queue pausiert so lange.
-            # Ist der Bestand nachgezogen, greift _claim_entity_backfill() ins
-            # Leere und der normale OCR-Betrieb läuft von selbst weiter.
-            backfill_id = _claim_entity_backfill()
-            if backfill_id is not None:
+            # Ist der Bestand nachgezogen, ist _has_entity_backfill() False
+            # und der normale OCR-Betrieb läuft von selbst weiter.
+            if _has_entity_backfill():
                 if not await ocr.is_model_up():
                     CURRENT = None
                     await asyncio.sleep(15)
                     continue
                 try:
-                    await _backfill_entities(backfill_id)
-                except Exception:  # noqa: BLE001
-                    log.exception('Entitäten-Backfill fehlgeschlagen')
-                    _mark_entities_attempted(backfill_id)
+                    await _run_entity_backfill()
                 finally:
                     CURRENT = None
                 continue

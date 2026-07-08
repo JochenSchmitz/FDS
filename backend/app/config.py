@@ -43,6 +43,10 @@ FRONTEND_DIST = PROJECT_DIR / 'frontend' / 'dist'
 
 OCR_PARALLEL = int(os.environ.get('OCR_PARALLEL', '4'))
 OCR_DPI = int(os.environ.get('OCR_DPI', '200'))
+# Wie viele Dokumente der Entitäten-Nachlauf gleichzeitig ans Modell gibt.
+# Die Extraktion ist reiner Text (bis 40k Zeichen); 8 gleichzeitig belegen
+# nur einen Bruchteil des KV-Caches und bringen ggü. seriell ~5x Durchsatz.
+ENTITY_PARALLEL = int(os.environ.get('ENTITY_PARALLEL', '8'))
 
 OCR_PROMPT = (
     'Extrahiere den vollständigen Text dieser gescannten Dokumentseite. '
