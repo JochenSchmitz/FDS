@@ -40,9 +40,16 @@ onUnmounted(() => {
   if (debounce) clearTimeout(debounce)
 })
 
-// Warteschlange: immer ungefiltert — die Suche wirkt nur rechts
+// Warteschlange: immer ungefiltert — die Suche wirkt nur rechts.
+// Sortiert wie der Worker verarbeitet (kleinste zuerst, dann Import-Zeit),
+// sodass oben steht, was als Nächstes/gerade dran ist.
 const queueDocs = computed(() =>
-  store.docs.filter((d) => d.status !== 'done'),
+  store.docs
+    .filter((d) => d.status !== 'done')
+    .sort(
+      (a, b) =>
+        a.size_bytes - b.size_bytes || a.uploaded_at.localeCompare(b.uploaded_at),
+    ),
 )
 // Sortierung wie in der Bibliothek: Klick auf den Spaltenkopf
 const { sortKey, sortDir, setSort, sorted: doneDocs } = useDocSort(() =>
