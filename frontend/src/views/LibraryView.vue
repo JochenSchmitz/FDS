@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { mdiClose, mdiMagnify, mdiMenuDown, mdiMenuUp, mdiTagOutline } from '@mdi/js'
+import {
+  mdiClose,
+  mdiMagnify,
+  mdiMenuDown,
+  mdiMenuUp,
+  mdiRefresh,
+  mdiTagOutline,
+} from '@mdi/js'
 import MdiIcon from '../components/MdiIcon.vue'
 import type { DocumentEntity } from '../api'
 import { useDocumentsStore } from '../stores/documents'
@@ -14,6 +21,7 @@ import {
   useDocSort,
   type SortKey,
 } from '../docsort'
+import { useLibraryColumns } from '../columns'
 
 const store = useDocumentsStore()
 
@@ -47,6 +55,67 @@ onUnmounted(() => {
 const { sortKey, sortDir, setSort, sorted: doneDocs } = useDocSort(() =>
   (store.results ?? store.docs).filter((d) => d.status === 'done'),
 )
+
+// Spalten-Layout (Reihenfolge + Breiten, persistent im localStorage)
+const { cols, setWidth, moveColumn, reset } = useLibraryColumns()
+
+// --- Spalten per Drag & Drop der Kopfzellen neu anordnen ---
+let dragFrom = -1
+const dragOver = ref(-1)
+let resizing = false
+let suppressClick = false
+
+function onColDragStart(idx: number, e: DragEvent) {
+  if (resizing) {
+    e.preventDefault() // beim Breite-Ziehen keinen Spalten-Umzug starten
+    return
+  }
+  dragFrom = idx
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+}
+function onColDragOver(idx: number) {
+  dragOver.value = idx
+}
+function onColDrop(idx: number) {
+  moveColumn(dragFrom, idx)
+  dragFrom = -1
+  dragOver.value = -1
+  suppressClick = true // Klick direkt nach dem Ablegen nicht als Sortierung werten
+}
+function onColDragEnd() {
+  dragFrom = -1
+  dragOver.value = -1
+}
+function onHeaderClick(key: SortKey) {
+  if (suppressClick) {
+    suppressClick = false
+    return
+  }
+  setSort(key)
+}
+
+// --- Spaltenbreite ziehen ---
+let resizeKey: SortKey | '' = ''
+let startX = 0
+let startW = 0
+function startResize(key: SortKey, width: number, e: PointerEvent) {
+  resizing = true
+  resizeKey = key
+  startX = e.clientX
+  startW = width
+  ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+}
+function onResizeMove(e: PointerEvent) {
+  if (!resizeKey) return
+  setWidth(resizeKey, startW + (e.clientX - startX))
+}
+function onResizeEnd(e: PointerEvent) {
+  resizeKey = ''
+  ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
+  // resizing erst nach diesem Ereigniszyklus lösen, damit ein direkt
+  // folgender dragstart noch unterdrückt wird
+  setTimeout(() => (resizing = false), 0)
+}
 </script>
 
 <template>
@@ -78,6 +147,14 @@ const { sortKey, sortDir, setSort, sorted: doneDocs } = useDocSort(() =>
           <MdiIcon :path="mdiClose" :size="13" />
         </button>
       </span>
+      <span class="spacer" />
+      <button
+        class="reset"
+        title="Spaltenbreiten und -reihenfolge zurücksetzen"
+        @click="reset"
+      >
+        <MdiIcon :path="mdiRefresh" :size="15" /> Spalten
+      </button>
     </header>
 
     <div class="body">
@@ -86,72 +163,94 @@ const { sortKey, sortDir, setSort, sorted: doneDocs } = useDocSort(() =>
         <thead>
           <tr>
             <th
-              v-for="col in ([
-                ['filename', 'Dokument'],
-                ['page_count', 'Seiten'],
-                ['doc_date', 'Dok.-Datum'],
-                ['uploaded_at', 'Importiert am'],
-                ['processed_at', 'Verarbeitet am'],
-                ['tags', 'Schlagworte'],
-                ['entities', 'Beteiligte'],
-              ] as [SortKey, string][])"
-              :key="col[0]"
+              v-for="(col, idx) in cols"
+              :key="col.key"
               class="sortable"
-              :title="`Nach ${col[1]} sortieren`"
-              @click="setSort(col[0])"
+              :class="{ dropzone: dragOver === idx }"
+              :style="{ width: col.width + 'px' }"
+              draggable="true"
+              :title="`Nach ${col.label} sortieren · Kopf ziehen zum Verschieben`"
+              @click="onHeaderClick(col.key)"
+              @dragstart="onColDragStart(idx, $event)"
+              @dragover.prevent="onColDragOver(idx)"
+              @dragend="onColDragEnd"
+              @drop="onColDrop(idx)"
             >
-              {{ col[1] }}
+              <span class="th-label">{{ col.label }}</span>
               <MdiIcon
-                v-if="sortKey === col[0]"
+                v-if="sortKey === col.key"
                 :path="sortDir === 1 ? mdiMenuUp : mdiMenuDown"
                 :size="16"
+              />
+              <span
+                class="col-resize"
+                title="Breite ziehen"
+                @click.stop
+                @dragstart.prevent
+                @pointerdown.stop="startResize(col.key, col.width, $event)"
+                @pointermove="onResizeMove"
+                @pointerup="onResizeEnd"
               />
             </th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="doc in doneDocs" :key="doc.id">
-            <td>
-              <RouterLink
-                :to="{ name: 'editor', params: { id: doc.id } }"
-                class="doc-link"
-                title="In OnlyOffice öffnen und bearbeiten"
-              >{{ stem(doc.filename) }}</RouterLink>
-              <div v-if="doc.summary" class="summary">{{ doc.summary }}</div>
-            </td>
-            <td>{{ doc.page_count ?? '—' }}</td>
-            <td>{{ fmtDate(doc.doc_date) }}</td>
-            <td class="imported">{{ fmtDateTime(doc.uploaded_at) }}</td>
-            <td class="imported">
-              {{ doc.processed_at ? fmtDateTime(doc.processed_at) : '—' }}
-            </td>
-            <td>
-              <button
-                v-for="tag in doc.tags"
-                :key="tag"
-                class="tag"
-                :class="{
-                  active: store.selectedTags.includes(tag),
-                  unreadable: tag === 'Unlesbar',
-                }"
-                :title="store.selectedTags.includes(tag)
-                  ? 'Filter entfernen'
-                  : 'Nach diesem Schlagwort filtern'"
-                @click="store.toggleTag(tag)"
-              >{{ tag }}</button>
-            </td>
-            <td>
-              <ul v-if="doc.entities.length" class="ents">
-                <li
-                  v-for="(e, i) in doc.entities"
-                  :key="i"
-                  :title="entityTitle(e)"
-                >
-                  <span class="erole" :class="e.role">{{ ROLE_LABEL[e.role] }}</span>
-                  {{ entityLabel(e) }}
-                </li>
-              </ul>
-              <span v-else class="dim">—</span>
+            <td
+              v-for="col in cols"
+              :key="col.key"
+              :class="{
+                imported: col.key === 'uploaded_at' || col.key === 'processed_at',
+              }"
+            >
+              <template v-if="col.key === 'filename'">
+                <RouterLink
+                  :to="{ name: 'editor', params: { id: doc.id } }"
+                  class="doc-link"
+                  title="In OnlyOffice öffnen und bearbeiten"
+                >{{ stem(doc.filename) }}</RouterLink>
+                <div v-if="doc.summary" class="summary">{{ doc.summary }}</div>
+              </template>
+              <template v-else-if="col.key === 'page_count'">
+                {{ doc.page_count ?? '—' }}
+              </template>
+              <template v-else-if="col.key === 'doc_date'">
+                {{ fmtDate(doc.doc_date) }}
+              </template>
+              <template v-else-if="col.key === 'uploaded_at'">
+                {{ fmtDateTime(doc.uploaded_at) }}
+              </template>
+              <template v-else-if="col.key === 'processed_at'">
+                {{ doc.processed_at ? fmtDateTime(doc.processed_at) : '—' }}
+              </template>
+              <template v-else-if="col.key === 'tags'">
+                <button
+                  v-for="tag in doc.tags"
+                  :key="tag"
+                  class="tag"
+                  :class="{
+                    active: store.selectedTags.includes(tag),
+                    unreadable: tag === 'Unlesbar',
+                  }"
+                  :title="store.selectedTags.includes(tag)
+                    ? 'Filter entfernen'
+                    : 'Nach diesem Schlagwort filtern'"
+                  @click="store.toggleTag(tag)"
+                >{{ tag }}</button>
+              </template>
+              <template v-else-if="col.key === 'entities'">
+                <ul v-if="doc.entities.length" class="ents">
+                  <li
+                    v-for="(e, i) in doc.entities"
+                    :key="i"
+                    :title="entityTitle(e)"
+                  >
+                    <span class="erole" :class="e.role">{{ ROLE_LABEL[e.role] }}</span>
+                    {{ entityLabel(e) }}
+                  </li>
+                </ul>
+                <span v-else class="dim">—</span>
+              </template>
             </td>
           </tr>
         </tbody>
@@ -195,14 +294,24 @@ const { sortKey, sortDir, setSort, sorted: doneDocs } = useDocSort(() =>
   color: var(--text-dim);
   font-size: 0.8rem;
 }
+.spacer {
+  flex: 1;
+}
+.reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
 .body {
   overflow: auto;
   min-height: 0;
   flex: 1;
 }
 table {
-  width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 th {
   text-align: left;
@@ -214,6 +323,7 @@ th {
   position: sticky;
   top: 0;
   background: var(--bg);
+  overflow: hidden;
 }
 th.sortable {
   cursor: pointer;
@@ -226,6 +336,35 @@ th.sortable:hover {
 th.sortable :deep(svg) {
   vertical-align: -3px;
 }
+th.dropzone {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.th-label {
+  pointer-events: none; /* Text soll den Drag der Kopfzelle nicht stören */
+}
+.col-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+}
+.col-resize::before {
+  content: '';
+  position: absolute;
+  right: 3px;
+  top: 20%;
+  height: 60%;
+  width: 2px;
+  background: transparent;
+}
+th:hover .col-resize::before {
+  background: var(--border);
+}
+.col-resize:hover::before {
+  background: var(--accent);
+}
 .imported {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -234,6 +373,8 @@ td {
   border-bottom: 1px solid var(--border);
   padding: 0.5rem 0.6rem;
   vertical-align: top;
+  overflow: hidden;
+  word-break: break-word;
 }
 .doc-link {
   color: var(--accent);
@@ -246,7 +387,6 @@ td {
 .summary {
   color: var(--text-dim);
   font-size: 0.85rem;
-  max-width: 72ch;
 }
 .tag {
   display: inline-flex;
@@ -294,7 +434,6 @@ td {
   flex-direction: column;
   gap: 0.15rem;
   font-size: 0.82rem;
-  max-width: 26ch;
 }
 .ents li {
   display: flex;
