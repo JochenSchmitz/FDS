@@ -366,7 +366,11 @@ def list_documents(db: SessionDep, user: auth.UserDep, q: str = '', tags: str = 
     """
     from .. import worker
 
-    stmt = select(Document).order_by(Document.uploaded_at.desc())
+    stmt = (
+        select(Document)
+        .options(selectinload(Document.entities))
+        .order_by(Document.uploaded_at.desc())
+    )
 
     # Zusätzlicher Tag-Filter (kommagetrennt): Dokument muss ALLE
     # angeklickten Schlagworte tragen (Postgres-Array-Contains @>).

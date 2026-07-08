@@ -4,6 +4,18 @@ import uuid
 from pydantic import BaseModel, ConfigDict
 
 
+class DocumentEntityOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    role: str
+    kind: str | None
+    name: str | None
+    company: str | None
+    address: str | None
+    phone: str | None
+    email: str | None
+
+
 class DocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -19,6 +31,7 @@ class DocumentOut(BaseModel):
     doc_date: datetime.date | None
     uploaded_at: datetime.datetime
     processed_at: datetime.datetime | None
+    entities: list[DocumentEntityOut]
 
 
 class DocumentUpdate(BaseModel):
@@ -46,18 +59,5 @@ class PageOut(BaseModel):
     content_md: str
 
 
-class DocumentEntityOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    role: str
-    kind: str | None
-    name: str | None
-    company: str | None
-    address: str | None
-    phone: str | None
-    email: str | None
-
-
 class DocumentDetail(DocumentOut):
     pages: list[PageOut]
-    entities: list[DocumentEntityOut]

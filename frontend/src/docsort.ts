@@ -2,7 +2,7 @@
  * (Bibliothek und Upload-Seite). */
 
 import { computed, ref } from 'vue'
-import type { DocumentOut } from './api'
+import type { DocumentEntity, DocumentOut } from './api'
 
 export type SortKey =
   | 'filename'
@@ -12,10 +12,23 @@ export type SortKey =
   | 'uploaded_at'
   | 'processed_at'
   | 'size_bytes'
+  | 'entities'
 
 /** Dateiname ohne Endung — angezeigt wird ohnehin nur die .docx. */
 export function stem(name: string): string {
   return name.replace(/\.[^.]+$/, '')
+}
+
+/** Deutsche Rollenbezeichnung eines Beteiligten. */
+export const ROLE_LABEL: Record<DocumentEntity['role'], string> = {
+  sender: 'Absender',
+  recipient: 'Empfänger',
+  mentioned: 'Erwähnt',
+}
+
+/** Kurzbezeichnung eines Beteiligten für Listen (Name bzw. Firma). */
+export function entityLabel(e: DocumentEntity): string {
+  return e.name || e.company || e.email || e.phone || '—'
 }
 
 export function useDocSort(docs: () => DocumentOut[]) {
@@ -29,7 +42,8 @@ export function useDocSort(docs: () => DocumentOut[]) {
     } else {
       sortKey.value = key
       // Texte initial aufsteigend, Zahlen/Daten absteigend (Neuestes zuerst)
-      sortDir.value = key === 'filename' || key === 'tags' ? 1 : -1
+      sortDir.value =
+        key === 'filename' || key === 'tags' || key === 'entities' ? 1 : -1
     }
   }
 
@@ -47,6 +61,13 @@ export function useDocSort(docs: () => DocumentOut[]) {
         return a.tags.join(', ').localeCompare(b.tags.join(', '), 'de', {
           sensitivity: 'base',
         })
+      case 'entities':
+        return a.entities
+          .map(entityLabel)
+          .join(', ')
+          .localeCompare(b.entities.map(entityLabel).join(', '), 'de', {
+            sensitivity: 'base',
+          })
       case 'uploaded_at':
         return a.uploaded_at.localeCompare(b.uploaded_at)
       case 'processed_at':

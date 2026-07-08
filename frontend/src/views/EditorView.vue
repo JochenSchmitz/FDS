@@ -10,10 +10,10 @@ import {
   mdiTagOutline,
 } from '@mdi/js'
 import MdiIcon from '../components/MdiIcon.vue'
-import { api, type DocumentDetail, type DocumentEntity } from '../api'
+import { api, type DocumentDetail } from '../api'
 import { useDocumentsStore } from '../stores/documents'
 import { createViewer, loadDocsApi } from '../onlyoffice'
-import { fmtDate, fmtDateTime, stem } from '../docsort'
+import { ROLE_LABEL, fmtDate, fmtDateTime, stem } from '../docsort'
 
 const props = defineProps<{ id: string }>()
 const store = useDocumentsStore()
@@ -79,12 +79,6 @@ function addTag() {
   newTag.value = ''
   if (!doc.value || !tag || doc.value.tags.includes(tag)) return
   saveTags([...doc.value.tags, tag])
-}
-
-const ROLE_LABEL: Record<DocumentEntity['role'], string> = {
-  sender: 'Absender',
-  recipient: 'Empfänger',
-  mentioned: 'Erwähnt',
 }
 
 function fmtSize(bytes: number): string {
@@ -154,24 +148,6 @@ onBeforeUnmount(() => {
             <p class="summary">{{ doc.summary }}</p>
           </section>
 
-          <section v-if="doc.entities.length" class="block">
-            <h3>
-              <MdiIcon :path="mdiAccountMultipleOutline" :size="15" /> Beteiligte
-            </h3>
-            <ul class="entities">
-              <li v-for="(e, i) in doc.entities" :key="i" class="entity">
-                <span class="role" :class="e.role">{{ ROLE_LABEL[e.role] }}</span>
-                <div class="who">
-                  <span v-if="e.name" class="name">{{ e.name }}</span>
-                  <span v-if="e.company" class="company">{{ e.company }}</span>
-                  <span v-if="e.address" class="addr">{{ e.address }}</span>
-                  <a v-if="e.phone" :href="`tel:${e.phone}`">{{ e.phone }}</a>
-                  <a v-if="e.email" :href="`mailto:${e.email}`">{{ e.email }}</a>
-                </div>
-              </li>
-            </ul>
-          </section>
-
           <section class="block">
             <h3><MdiIcon :path="mdiTagOutline" :size="15" /> Schlagworte</h3>
             <div class="tags">
@@ -208,6 +184,24 @@ onBeforeUnmount(() => {
                 <MdiIcon :path="mdiPlus" :size="16" />
               </button>
             </form>
+          </section>
+
+          <section v-if="doc.entities.length" class="block">
+            <h3>
+              <MdiIcon :path="mdiAccountMultipleOutline" :size="15" /> Beteiligte
+            </h3>
+            <ul class="entities">
+              <li v-for="(e, i) in doc.entities" :key="i" class="entity">
+                <span class="role" :class="e.role">{{ ROLE_LABEL[e.role] }}</span>
+                <div class="who">
+                  <span v-if="e.name" class="name">{{ e.name }}</span>
+                  <span v-if="e.company" class="company">{{ e.company }}</span>
+                  <span v-if="e.address" class="addr">{{ e.address }}</span>
+                  <a v-if="e.phone" :href="`tel:${e.phone}`">{{ e.phone }}</a>
+                  <a v-if="e.email" :href="`mailto:${e.email}`">{{ e.email }}</a>
+                </div>
+              </li>
+            </ul>
           </section>
         </template>
         <p v-else class="loading">Lade Metadaten …</p>

@@ -1,3 +1,13 @@
+export interface DocumentEntity {
+  role: 'sender' | 'recipient' | 'mentioned'
+  kind: 'person' | 'organization' | null
+  name: string | null
+  company: string | null
+  address: string | null
+  phone: string | null
+  email: string | null
+}
+
 export interface DocumentOut {
   id: string
   filename: string
@@ -11,6 +21,7 @@ export interface DocumentOut {
   doc_date: string | null
   uploaded_at: string
   processed_at: string | null
+  entities: DocumentEntity[]
 }
 
 export interface UploadSkipped {
@@ -28,19 +39,8 @@ export interface PageOut {
   content_md: string
 }
 
-export interface DocumentEntity {
-  role: 'sender' | 'recipient' | 'mentioned'
-  kind: 'person' | 'organization' | null
-  name: string | null
-  company: string | null
-  address: string | null
-  phone: string | null
-  email: string | null
-}
-
 export interface DocumentDetail extends DocumentOut {
   pages: PageOut[]
-  entities: DocumentEntity[]
 }
 
 export interface AppConfig {

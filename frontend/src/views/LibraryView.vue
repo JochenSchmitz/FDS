@@ -3,10 +3,24 @@ import { onMounted, onUnmounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { mdiClose, mdiMagnify, mdiMenuDown, mdiMenuUp, mdiTagOutline } from '@mdi/js'
 import MdiIcon from '../components/MdiIcon.vue'
+import type { DocumentEntity } from '../api'
 import { useDocumentsStore } from '../stores/documents'
-import { fmtDate, fmtDateTime, stem, useDocSort, type SortKey } from '../docsort'
+import {
+  ROLE_LABEL,
+  entityLabel,
+  fmtDate,
+  fmtDateTime,
+  stem,
+  useDocSort,
+  type SortKey,
+} from '../docsort'
 
 const store = useDocumentsStore()
+
+/** Zusatzangaben eines Beteiligten als Tooltip (Firma · Anschrift · …). */
+function entityTitle(e: DocumentEntity): string {
+  return [e.company, e.address, e.phone, e.email].filter(Boolean).join(' · ')
+}
 
 onMounted(async () => {
   await store.fetch()
@@ -79,6 +93,7 @@ const { sortKey, sortDir, setSort, sorted: doneDocs } = useDocSort(() =>
                 ['uploaded_at', 'Importiert am'],
                 ['processed_at', 'Verarbeitet am'],
                 ['tags', 'Schlagworte'],
+                ['entities', 'Beteiligte'],
               ] as [SortKey, string][])"
               :key="col[0]"
               class="sortable"
@@ -124,6 +139,19 @@ const { sortKey, sortDir, setSort, sorted: doneDocs } = useDocSort(() =>
                   : 'Nach diesem Schlagwort filtern'"
                 @click="store.toggleTag(tag)"
               >{{ tag }}</button>
+            </td>
+            <td>
+              <ul v-if="doc.entities.length" class="ents">
+                <li
+                  v-for="(e, i) in doc.entities"
+                  :key="i"
+                  :title="entityTitle(e)"
+                >
+                  <span class="erole" :class="e.role">{{ ROLE_LABEL[e.role] }}</span>
+                  {{ entityLabel(e) }}
+                </li>
+              </ul>
+              <span v-else class="dim">—</span>
             </td>
           </tr>
         </tbody>
@@ -257,6 +285,50 @@ td {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.15rem;
+}
+.ents {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.82rem;
+  max-width: 26ch;
+}
+.ents li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.ents li > :last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.erole {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: var(--bg-soft);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+.erole.sender {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: transparent;
+}
+.erole.recipient {
+  background: rgba(22, 163, 74, 0.12);
+  color: var(--ok);
+  border-color: transparent;
+}
+.dim {
+  color: var(--text-dim);
 }
 .error {
   color: var(--err);
