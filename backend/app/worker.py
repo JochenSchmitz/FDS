@@ -404,15 +404,16 @@ async def _process(doc_id) -> None:
 def _claim_next() -> object | None:
     """Nächstes wartendes Dokument atomar auf 'processing' setzen.
 
-    Sortierung uploaded_at + id: bei Sammel-Uploads mit identischem
-    Zeitstempel bleibt die Reihenfolge trotzdem deterministisch (FIFO,
+    Sortierung nach Dateigröße aufsteigend: kleine Dokumente zuerst,
+    damit die schnellen nicht hinter einem großen festhängen. Bei
+    gleicher Größe entscheidet uploaded_at + id (deterministisch, FIFO;
     UUID7-IDs sind zeitlich sortiert).
     """
     with SessionLocal() as db:
         doc = db.scalars(
             select(Document)
             .where(Document.status == DocStatus.pending)
-            .order_by(Document.uploaded_at, Document.id)
+            .order_by(Document.size_bytes, Document.uploaded_at, Document.id)
             .with_for_update(skip_locked=True)
             .limit(1)
         ).first()

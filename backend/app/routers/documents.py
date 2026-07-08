@@ -14,7 +14,13 @@ from sqlalchemy.orm import Session, selectinload
 from .. import auth, config
 from ..db import SessionDep
 from ..models import DocStatus, Document, Page
-from ..schemas import DocumentDetail, DocumentOut, UploadResult, UploadSkipped
+from ..schemas import (
+    DocumentDetail,
+    DocumentOut,
+    DocumentUpdate,
+    UploadResult,
+    UploadSkipped,
+)
 
 router = APIRouter(prefix='/api/documents', tags=['documents'])
 log = logging.getLogger('upload')
@@ -423,6 +429,31 @@ def _get_document(doc_id: uuid.UUID, db: Session, with_pages: bool = False) -> D
 @router.get('/{doc_id}', response_model=DocumentDetail)
 def get_document(doc_id: uuid.UUID, db: SessionDep, user: auth.UserDep):
     return _get_document(doc_id, db, with_pages=True)
+
+
+@router.patch('/{doc_id}', response_model=DocumentOut)
+def update_document(
+    doc_id: uuid.UUID, patch: DocumentUpdate, db: SessionDep, user: auth.UserDep
+):
+    """Schlagworte von Hand pflegen (in der Bearbeitungsansicht).
+
+    Die Liste wird normalisiert: getrimmt, Leereinträge und Dubletten
+    entfernt, Reihenfolge bleibt erhalten. Achtung: bei einer erneuten
+    Verarbeitung (`reprocess`) überschreibt das Modell die Tags wieder
+    (feste Ordner-Tags bleiben, manuelle Ergänzungen gehen verloren).
+    """
+    doc = _get_document(doc_id, db)
+    seen: set[str] = set()
+    clean: list[str] = []
+    for raw in patch.tags:
+        tag = raw.strip()
+        if tag and tag not in seen:
+            seen.add(tag)
+            clean.append(tag)
+    doc.tags = clean
+    db.commit()
+    db.refresh(doc)
+    return doc
 
 
 @router.post('/{doc_id}/reprocess', response_model=DocumentOut)

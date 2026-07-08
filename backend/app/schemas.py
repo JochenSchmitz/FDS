@@ -21,6 +21,12 @@ class DocumentOut(BaseModel):
     processed_at: datetime.datetime | None
 
 
+class DocumentUpdate(BaseModel):
+    """Vom Nutzer editierbare Felder eines Dokuments (bisher nur Schlagworte)."""
+
+    tags: list[str]
+
+
 class UploadSkipped(BaseModel):
     """Beim Upload abgelehnte Datei samt kurzem Grund (z.B. Duplikat)."""
 

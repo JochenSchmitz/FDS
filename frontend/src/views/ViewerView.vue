@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { mdiArrowLeft } from '@mdi/js'
+import MdiIcon from '../components/MdiIcon.vue'
 import { api, type DocumentDetail } from '../api'
 import { useDocumentsStore } from '../stores/documents'
 import { createViewer, loadDocsApi } from '../onlyoffice'
 
 const props = defineProps<{ id: string }>()
 const store = useDocumentsStore()
+const router = useRouter()
 
 const doc = ref<DocumentDetail | null>(null)
 const error = ref('')
@@ -13,6 +17,29 @@ const error = ref('')
 // alles andere (z.B. .msg/.doc/.docx) -> nur Download-Hinweis
 const originalKind = ref<'pdf' | 'image' | 'none'>('none')
 let editors: { destroyEditor: () => void }[] = []
+
+// Breite der linken Spalte (Original) in Prozent; per Splitter ziehbar.
+const leftWidth = ref(50)
+const panesEl = ref<HTMLElement | null>(null)
+const dragging = ref(false)
+
+function onDragStart(e: PointerEvent) {
+  dragging.value = true
+  // Pointer-Capture: Move/Up erreichen den Splitter auch über den iframes.
+  ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+}
+
+function onDragMove(e: PointerEvent) {
+  if (!dragging.value || !panesEl.value) return
+  const rect = panesEl.value.getBoundingClientRect()
+  const pct = ((e.clientX - rect.left) / rect.width) * 100
+  leftWidth.value = Math.min(80, Math.max(20, pct))
+}
+
+function onDragEnd(e: PointerEvent) {
+  dragging.value = false
+  ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
+}
 
 onMounted(async () => {
   try {
@@ -56,6 +83,9 @@ onBeforeUnmount(() => {
 <template>
   <div class="viewer">
     <div class="head">
+      <button class="navbtn" @click="router.push({ name: 'documents' })">
+        <MdiIcon :path="mdiArrowLeft" :size="16" /> Übersicht
+      </button>
       <h2>{{ doc?.filename ?? '…' }}</h2>
       <div v-if="doc" class="meta">
         <span
@@ -72,8 +102,8 @@ onBeforeUnmount(() => {
     <p v-if="doc?.summary" class="summary">{{ doc.summary }}</p>
     <p v-if="error" class="error">{{ error }}</p>
 
-    <div class="panes">
-      <section class="pane">
+    <div ref="panesEl" class="panes" :class="{ dragging }">
+      <section class="pane" :style="{ width: leftWidth + '%' }">
         <header>Original</header>
         <img
           v-if="originalKind === 'image' && doc"
@@ -88,7 +118,16 @@ onBeforeUnmount(() => {
         </p>
         <div v-else id="oo-original" class="oo-host"></div>
       </section>
-      <section class="pane">
+
+      <div
+        class="splitter"
+        title="Ziehen zum Verschieben"
+        @pointerdown="onDragStart"
+        @pointermove="onDragMove"
+        @pointerup="onDragEnd"
+      />
+
+      <section class="pane result">
         <header>OCR-Ergebnis (bearbeitbar — Änderungen werden gespeichert)</header>
         <div id="oo-result" class="oo-host"></div>
       </section>
@@ -110,6 +149,11 @@ onBeforeUnmount(() => {
   gap: 1rem;
   flex-wrap: wrap;
 }
+.navbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
 .head h2 {
   margin: 0;
   font-size: 1.05rem;
@@ -130,11 +174,13 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .panes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.8rem;
+  display: flex;
   flex: 1;
   min-height: 0;
+}
+/* Während des Ziehens: iframes schlucken keine Zeigerereignisse mehr */
+.panes.dragging .pane {
+  pointer-events: none;
 }
 .pane {
   display: flex;
@@ -143,6 +189,10 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   overflow: hidden;
   min-height: 0;
+  min-width: 0;
+}
+.pane.result {
+  flex: 1;
 }
 .pane header {
   padding: 0.3rem 0.8rem;
@@ -169,6 +219,22 @@ onBeforeUnmount(() => {
   color: var(--text-dim);
   text-align: center;
   padding: 2rem 1rem;
+}
+.splitter {
+  flex: 0 0 10px;
+  cursor: col-resize;
+  position: relative;
+}
+.splitter::before {
+  content: '';
+  position: absolute;
+  inset: 0 4px;
+  background: var(--border);
+  border-radius: 2px;
+}
+.splitter:hover::before,
+.panes.dragging .splitter::before {
+  background: var(--accent);
 }
 .error {
   color: var(--err);

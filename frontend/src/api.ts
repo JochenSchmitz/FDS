@@ -80,6 +80,12 @@ export const api = {
     files.forEach((f) => body.append('files', f))
     return request<UploadResult>('/api/documents', { method: 'POST', body })
   },
+  update: (id: string, patch: { tags: string[] }) =>
+    request<DocumentOut>(`/api/documents/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
   remove: (id: string) =>
     request<void>(`/api/documents/${id}`, { method: 'DELETE' }),
   reprocess: (id: string) =>
