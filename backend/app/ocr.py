@@ -3,11 +3,14 @@
 import base64
 import datetime
 import json
+import logging
 import re
 
 import httpx
 
 from . import config
+
+log = logging.getLogger('ocr')
 
 
 async def _chat(
@@ -25,6 +28,9 @@ async def _chat(
         },
         timeout=5400,
     )
+    if resp.status_code >= 400:
+        # Der Body nennt den echten Grund (z.B. Kontextfenster gesprengt)
+        log.warning('vLLM %d: %s', resp.status_code, resp.text[:500])
     resp.raise_for_status()
     return resp.json()['choices'][0]['message']['content']
 
@@ -43,10 +49,28 @@ async def ocr_page(
 
 
 async def extract_metadata(client: httpx.AsyncClient, full_text: str) -> dict:
-    """Schlagworte, Zusammenfassung und Dokumentdatum aus dem Text ableiten."""
-    raw = await _chat(
-        client, config.METADATA_PROMPT + full_text[:15000], max_tokens=1000
-    )
+    """Schlagworte, Zusammenfassung und Dokumentdatum aus dem Text ableiten.
+
+    Die Zeichen-Obergrenze ist nur eine Heuristik: zahlenlastige
+    Tabellen (Leistungsverzeichnisse!) tokenisieren mit ~1,1 Token pro
+    Zeichen statt ~0,4 und sprengen dann das 16k-Kontextfenster
+    (HTTP 400). In dem Fall wird der Text schrittweise gekürzt.
+    """
+    raw = ''
+    for cap in (15000, 8000, 4000):
+        try:
+            raw = await _chat(
+                client, config.METADATA_PROMPT + full_text[:cap], max_tokens=1000
+            )
+            break
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400 and cap > 4000:
+                log.warning(
+                    'Metadaten-Prompt zu lang (%d Zeichen) — kürze und versuche erneut',
+                    cap,
+                )
+                continue
+            raise
     match = re.search(r'\{.*\}', raw, re.DOTALL)
     meta: dict = {'tags': [], 'summary': None, 'doc_date': None}
     if not match:
