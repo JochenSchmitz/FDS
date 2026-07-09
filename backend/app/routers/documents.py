@@ -402,7 +402,14 @@ def list_documents(db: SessionDep, user: auth.UserDep, q: str = '', tags: str = 
             return func.regexp_replace(col, '\\s', '', 'g')
 
         tags_str = func.array_to_string(Document.tags, ' ')
-        fuzzy = func.word_similarity
+        # strict_word_similarity statt word_similarity: word_similarity schiebt
+        # ein Fenster über das Zielfeld und nimmt den besten Ausschnitt — je
+        # länger das Suchwort, desto eher findet sich IRGENDEIN Fenster über der
+        # Schwelle, sodass lange Wörter ("zytostatik") plötzlich Dutzende
+        # Fehltreffer zogen. Die strikte Variante bindet den Ausschnitt an
+        # Wortgrenzen und zählt die nicht passenden Trigramme mit; echte
+        # Tippfehler bleiben (>= 0.45), das Zufallsrauschen fällt weg.
+        fuzzy = func.strict_word_similarity
 
         def term_clause(term: str):
             # Pro Wort weiterhin leerzeichen-unempfindlich: das gequetschte
