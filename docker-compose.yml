@@ -58,8 +58,15 @@ services:
   # Vision-Language-Modell für Dokument-OCR (gescannte Seiten -> Text).
   # Offizielle FP8-Quantisierung: nahezu verlustfrei, läuft nativ auf
   # Blackwell und lässt reichlich KV-Cache für hochaufgelöste Seiten.
-  # --gpu-memory-utilization 0.60 bewusst konservativ: der Ollama-
-  # Systemdienst belegt dauerhaft ~22 GB des Unified Memory.
+  # vip ist eine GETEILTE Maschine (mehrere Projekte an derselben GB10,
+  # ~119 GiB Unified für CPU+GPU). Zu hohe Reservierung hat zusammen mit den
+  # anderen Diensten den Speicher gesprengt und die Kiste hart einfrieren
+  # lassen. Daher konservativ: kürzeres Kontextfenster (OCR/Metadaten liegen
+  # weit unter 32k, extract_* kürzen bei Bedarf selbst) + moderate
+  # gpu-memory-utilization. So bleibt Luft für die anderen Dienste; der
+  # zweite GB10 (tbv, volle 64k) fängt die OCR-Last mit auf.
+  # 0.40 wäre mit 64k-Kontext nicht gestartet: nach den Gewichten blieben nur
+  # ~7,5 GiB KV-Cache, 64k verlangt aber >=16 GiB.
   qwen-ocr:
     <<: *vllm-common
     container_name: qwen-ocr-vllm
@@ -71,8 +78,8 @@ services:
       vllm serve Qwen/Qwen3-VL-32B-Instruct-FP8
       --host 0.0.0.0
       --port 8000
-      --max-model-len 65536
-      --gpu-memory-utilization 0.60"
+      --max-model-len 32768
+      --gpu-memory-utilization 0.45"
 
   # Load-Balancer vor beide vLLM-OCR-Endpunkte: vip lokal (127.0.0.1:8012)
   # + zweiter GB10 tbv-server (172.31.102.12:8012). Verteilt einzelne
