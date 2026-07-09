@@ -52,6 +52,11 @@ MIME_BY_SUFFIX = {
 }
 IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.tif', '.tiff'}
 
+# Schwelle für die tippfehlertolerante Trigramm-Suche (word_similarity):
+# niedriger = toleranter (mehr Treffer, aber auch mehr Fehltreffer). 0.4
+# fängt typische Vertipper wie "rechng" -> "Rechnung" zuverlässig ab.
+FUZZY_THRESHOLD = 0.4
+
 
 def file_sha256(path: Path) -> str:
     h = hashlib.sha256()
@@ -363,6 +368,10 @@ def list_documents(db: SessionDep, user: auth.UserDep, q: str = '', tags: str = 
     daher findet "ad blue" auch "AdBlue" und "Gewähr Leistung" auch
     "Gewährleistung". Die GIN-Trigram-Expression-Indizes halten die
     ILIKE-'%...%'-Suchen auch bei großen Beständen schnell.
+
+    Zusätzlich tippfehlertolerant: Name, Schlagworte und Zusammenfassung
+    werden per Trigramm-Wortähnlichkeit (pg_trgm) gematcht, sodass auch
+    Vertipper ("rechng" -> "Rechnung") treffen. Der Volltext bleibt exakt.
     """
     from .. import worker
 
@@ -378,6 +387,7 @@ def list_documents(db: SessionDep, user: auth.UserDep, q: str = '', tags: str = 
     if tag_list:
         stmt = stmt.where(Document.tags.contains(tag_list))
 
+    q_raw = q.strip()  # Original (mit Leerzeichen) für die Ähnlichkeitssuche
     q = ''.join(q.split())  # Whitespace aus der Query entfernen
     if q:
         escaped = q.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
@@ -395,12 +405,22 @@ def list_documents(db: SessionDep, user: auth.UserDep, q: str = '', tags: str = 
             )
             .exists()
         )
+        tags_str = func.array_to_string(Document.tags, ' ')
+        # Tippfehlertoleranz per Trigramm-Wortähnlichkeit (pg_trgm) auf den
+        # KURZEN Feldern (Name, Schlagworte, Zusammenfassung): "rechng" findet
+        # "Rechnung". word_similarity ist trigrammbasiert und damit case-
+        # unempfindlich. Der Volltext bleibt bewusst bei exakter Teilstring-
+        # Suche — Fuzzy über ganze Dokumente brächte zu viele Fehltreffer.
+        fuzzy = func.word_similarity
         stmt = stmt.where(
             or_(
                 squeezed(Document.filename).ilike(like),
                 squeezed(Document.summary).ilike(like),
-                squeezed(func.array_to_string(Document.tags, ' ')).ilike(like),
+                squeezed(tags_str).ilike(like),
                 page_match,
+                fuzzy(q_raw, Document.filename) >= FUZZY_THRESHOLD,
+                fuzzy(q_raw, tags_str) >= FUZZY_THRESHOLD,
+                fuzzy(q_raw, Document.summary) >= FUZZY_THRESHOLD,
             )
         )
 
