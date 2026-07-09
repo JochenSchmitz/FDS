@@ -2,7 +2,6 @@
 .env
 
 # Dokumente & Ergebnisse (sensibel, groß)
-scans/
 data/
 ergebnisse/
 

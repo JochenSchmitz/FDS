@@ -19,7 +19,6 @@ Schlagwort **Unlesbar**.
 ```bash
 ./dev-temux-start.sh   # Entwicklung: Backend (--reload) + Vite + ngrok in tmux
 ./dev-temux-stop.sh    # ... alles wieder stoppen
-./start-app.sh         # Alternative ohne tmux/ngrok: nur lokal auf Port 8020
 ```
 
 Weboberfläche: lokal **http://localhost:5175** (Vite) bzw. **http://172.31.102.13:8020**
@@ -63,9 +62,6 @@ der Tabelle `pages`.
 
 ```bash
 docker compose --profile ocr up -d      # Qwen3-VL laden (Port 8012, dauert Minuten)
-./ocr-test.sh scans/beispiel.pdf        # Einzeltest: PDF, erste Seite
-./ocr-test.sh scans/beispiel.pdf 3      # ... Seite 3
-.venv/bin/python ocr-batch.py           # ALLE Dokumente aus scans/ -> ergebnisse/*.md + *.docx
 docker compose --profile ocr down
 docker compose logs -f                  # Logs (Modell-Laden dauert einige Minuten)
 ```
@@ -82,8 +78,7 @@ Ollama-Systemdienst dauerhaft ~22 GB des Unified Memory belegt.
 - `backend/` — FastAPI-App (Router, Worker, Modelle, Tests)
 - `frontend/` — Vue-3-Oberfläche
 - `hf-home/` — Hugging-Face-Cache mit den Modellgewichten (~34 GB), wird in den Container gemountet
-- `ocr-test.sh` — Einzelseiten-OCR-Test; `ocr-batch.py` — Batch-OCR für alle Scans
-- `scans/` — Eingangsordner für Batch-OCR; `ergebnisse/` — Ausgabe (.md + .docx)
+- `ergebnisse/` — Ausgabe des Workers (.md + .docx)
 - `data/originals/` — hochgeladene Originaldateien (Dateiname = UUID)
 - `.venv/` — Python 3.14 (via uv): `make install`
 - `docker-compose.yml` — Postgres + OCR-Modell
